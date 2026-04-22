@@ -1,0 +1,4 @@
+# System Configuration
+output:
+  default_path: './output/reports'
+  timestamp_format: '%Y%m%d_%H%M%S'

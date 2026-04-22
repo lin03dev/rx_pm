@@ -1,0 +1,71 @@
+# Report Configuration
+output:
+  default_path: "./output/reports"
+  timestamp_format: "%Y%m%d_%H%M%S"
+  excel_engine: "openpyxl"
+
+reports:
+  user:
+    description: "User management and assignments report"
+    available_filters: ["role", "status", "country", "organisation"]
+    sheets: ["User Details", "Role Summary", "Country Distribution"]
+  
+  worklog:
+    description: "Translation work tracking and productivity"
+    available_filters: ["project_id", "role", "start_date", "end_date", "stage"]
+    sheets: ["Worklog Details", "User Productivity", "Weekly Summary", "Project Summary"]
+  
+  obs:
+    description: "Open Bible Stories translation and audio progress"
+    available_filters: ["project_id", "chapter_no", "status"]
+    sheets: ["OBS Projects Summary", "Chapter Details", "Audio Recordings"]
+  
+  literature:
+    description: "Literature translation and genre completion"
+    available_filters: ["project_id", "genre_id"]
+    sheets: ["Literature Projects", "Genre Details", "Genre Edit History"]
+  
+  lms:
+    description: "LMS course enrollment, attendance, and surveys"
+    available_filters: ["course_id", "batch_id", "country", "role"]
+    sheets: ["Batch Summary", "Module Completion", "Assignment Submissions", 
+             "Survey Responses", "Participant Demographics"]
+  
+  schema:
+    description: "Database schema analysis"
+    available_filters: ["table_name", "schema_type"]
+    sheets: ["Table Summary", "Column Details", "Table Sizes"]
+  
+  dashboard:
+    description: "Comprehensive dashboard with key metrics"
+    available_filters: ["project_type", "date_range"]
+    sheets: ["Overview Metrics", "AG Statistics", "OBS Translation Progress",
+             "Literature Progress", "User Role Distribution", "Recent Activity"]
+
+databases:
+  default: "AG_Dev"
+  available:
+    - name: "AG_Dev"
+      environment: "development"
+      project: "AG"
+    - name: "AG_Staging"
+      environment: "staging"
+      project: "AG"
+    - name: "AG_Prod"
+      environment: "production"
+      project: "AG"
+    - name: "Telios_LMS_Dev"
+      environment: "development"
+      project: "Telios_LMS"
+    - name: "Telios_LMS_Staging"
+      environment: "staging"
+      project: "Telios_LMS"
+    - name: "Telios_LMS_Prod"
+      environment: "production"
+      project: "Telios_LMS"
+
+formatting:
+  header_color: "1B4F72"
+  header_font_color: "FFFFFF"
+  alternate_row_color: "F2F2F2"
+  max_column_width: 50
