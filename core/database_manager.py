@@ -65,7 +65,7 @@ class DatabaseManager:
                     result.add(verse_id)
         return result
     
-    def execute_query(self, query: str, params: Optional[tuple] = None, 
+    def execute_query(self, query: str, params: Optional[dict] = None, 
                       db_name: Optional[str] = None) -> pd.DataFrame:
         """Execute SQL query and return results as DataFrame"""
         use_db = db_name or self.current_db
@@ -75,9 +75,7 @@ class DatabaseManager:
         engine = self._get_engine(use_db)
         try:
             if params:
-                # Convert dict to tuple if needed
-                if isinstance(params, dict):
-                    params = tuple(params.values())
+                # params should be a dictionary for SQLAlchemy
                 df = pd.read_sql_query(text(query), engine, params=params)
             else:
                 df = pd.read_sql_query(query, engine)
@@ -86,7 +84,7 @@ class DatabaseManager:
             logger.error(f"Query execution error: {e}")
             raise
     
-    def execute_update(self, query: str, params: Optional[tuple] = None,
+    def execute_update(self, query: str, params: Optional[dict] = None,
                        db_name: Optional[str] = None) -> int:
         use_db = db_name or self.current_db
         if not use_db:
@@ -95,8 +93,6 @@ class DatabaseManager:
         engine = self._get_engine(use_db)
         with engine.connect() as conn:
             if params:
-                if isinstance(params, dict):
-                    params = tuple(params.values())
                 result = conn.execute(text(query), params)
             else:
                 result = conn.execute(text(query))

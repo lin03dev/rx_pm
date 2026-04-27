@@ -56,7 +56,7 @@ echo -e "${GREEN}✅ Templates generated${NC}"
 # Step 4: Generate AG_Dev Reports
 print_section "STEP 4: Generating AG_Dev Reports"
 
-reports="bible-completion obs-completion literature-completion grammar-completion individual worklog user user-assignments consolidated user-activity"
+reports="bible-completion obs-completion literature-completion grammar-completion individual worklog user user-assignments consolidated user-activity ag-drafting"
 for report in $reports; do
     echo -e "${YELLOW}▶ Generating $report report...${NC}"
     python3 run.py --report "$report" --database AG_Dev --format excel 2>&1 | grep -E "(✅|❌|Error|Retrieved)" || echo "   ⚠️ Could not generate $report"

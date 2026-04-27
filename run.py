@@ -27,6 +27,7 @@ from reports.user_assignment_report import UserAssignmentReport
 from reports.consolidated_project_report import ConsolidatedProjectReport
 from reports.literature_genre_report import LiteratureGenreReport
 from reports.user_activity_report import UserActivityReport
+from reports.ag_drafting_monitoring_report import AGDraftingMonitoringReport
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -72,6 +73,7 @@ Examples:
   python run.py --report consolidated --database AG_Dev
   python run.py --report literature-genre --database AG_Dev
   python run.py --report user-activity --database AG_Dev
+  python run.py --report ag-drafting --database AG_Dev
   
   # Telios_LMS Reports
   python run.py --report lms --database Telios_LMS_Dev
@@ -91,7 +93,7 @@ Examples:
                            'bible-completion', 'obs-completion', 
                            'literature-completion', 'grammar-completion',
                            'user-assignments', 'consolidated', 'literature-genre',
-                           'user-activity', 'lms'
+                           'user-activity', 'ag-drafting', 'lms'
                        ],
                        help='Type of report to generate')
     
@@ -150,6 +152,7 @@ Examples:
         print("   • user-assignments - Complete user assignments across all projects")
         print("   • user-activity - User activity tracking (start date, last use, project roles)")
         print("   • consolidated - All project types in one consolidated view")
+        print("   • ag-drafting - AG Drafting Monitoring Report (all projects combined)")
         print("\n📁 Telios_LMS Reports:")
         print("   • lms - LMS batch, enrollment, attendance report")
         print("\n📁 Utility:")
@@ -194,6 +197,7 @@ Examples:
     report_engine.register_report('consolidated', ConsolidatedProjectReport)
     report_engine.register_report('literature-genre', LiteratureGenreReport)
     report_engine.register_report('user-activity', UserActivityReport)
+    report_engine.register_report('ag-drafting', AGDraftingMonitoringReport)
     
     # Generate custom report
     if args.report == 'custom':

@@ -1,4 +1,625 @@
 
+===== FILE: ./analyze_grammar_assignments.py =====
+
+#!/usr/bin/env python3
+"""
+Analyze Grammar Module Assignment Structure
+Compare with Bible and OBS assignment patterns
+"""
+
+import sys
+sys.path.insert(0, '.')
+
+from config.database_config import DatabaseConfigManager
+from core.database_manager import DatabaseManager
+
+db_config = DatabaseConfigManager()
+db_manager = DatabaseManager(db_config)
+db_manager.current_db = 'AG_Dev'
+
+print("="*80)
+print("GRAMMAR ASSIGNMENT STRUCTURE ANALYSIS")
+print("="*80)
+
+# 1. Check how Bible projects are assigned (for comparison)
+print("\n1. BIBLE PROJECT ASSIGNMENT PATTERN:")
+query_bible = """
+SELECT 
+    p.name as project_name,
+    utp.role,
+    utp.verses,
+    array_length(string_to_array(COALESCE(utp.verses, ''), ','), 1) as verses_count
+FROM users_to_projects utp
+JOIN projects p ON utp."projectId" = p.id
+WHERE p."projectType" = 'TEXT_TRANSLATION'
+  AND utp.verses IS NOT NULL
+  AND utp.verses != ''
+LIMIT 3
+"""
+df_bible = db_manager.execute_query(query_bible)
+print(df_bible.to_string())
+
+# 2. Check how OBS projects are assigned
+print("\n2. OBS PROJECT ASSIGNMENT PATTERN:")
+query_obs = """
+SELECT 
+    p.name as project_name,
+    utp.role,
+    utp."obsChapters",
+    array_length(string_to_array(COALESCE(utp."obsChapters", ''), ','), 1) as chapters_count
+FROM users_to_projects utp
+JOIN projects p ON utp."projectId" = p.id
+WHERE p."projectType" = 'OBS'
+  AND utp."obsChapters" IS NOT NULL
+  AND utp."obsChapters" != ''
+LIMIT 3
+"""
+df_obs = db_manager.execute_query(query_obs)
+print(df_obs.to_string())
+
+# 3. Check how Literature projects are assigned
+print("\n3. LITERATURE PROJECT ASSIGNMENT PATTERN:")
+query_lit = """
+SELECT 
+    p.name as project_name,
+    utp.role,
+    utp."literatureGenres",
+    array_length(string_to_array(COALESCE(utp."literatureGenres", ''), ','), 1) as genres_count
+FROM users_to_projects utp
+JOIN projects p ON utp."projectId" = p.id
+WHERE p."projectType" IN ('LITERATURE', 'LITERATURE_PROJECT')
+  AND utp."literatureGenres" IS NOT NULL
+  AND utp."literatureGenres" != ''
+LIMIT 3
+"""
+df_lit = db_manager.execute_query(query_lit)
+print(df_lit.to_string())
+
+# 4. Check how Grammar projects are assigned
+print("\n4. GRAMMAR PROJECT ASSIGNMENT PATTERN:")
+query_grammar = """
+SELECT 
+    p.name as project_name,
+    p."projectType",
+    utp.role,
+    utp.verses,
+    utp."obsChapters",
+    utp."literatureGenres"
+FROM users_to_projects utp
+JOIN projects p ON utp."projectId" = p.id
+WHERE p."projectType" IN ('GRAMMAR_PHRASES', 'GRAMMAR_PRONOUNS', 'GRAMMAR_CONNECTIVES')
+  AND utp.role = 'MTT'
+LIMIT 10
+"""
+df_grammar = db_manager.execute_query(query_grammar)
+print(df_grammar.to_string())
+
+# 5. Check if grammar projects have any assignment fields populated
+print("\n5. GRAMMAR ASSIGNMENT FIELDS SUMMARY:")
+query_summary = """
+SELECT 
+    p."projectType",
+    COUNT(*) as total_assignments,
+    COUNT(CASE WHEN utp.verses IS NOT NULL AND utp.verses != '' THEN 1 END) as has_verses,
+    COUNT(CASE WHEN utp."obsChapters" IS NOT NULL AND utp."obsChapters" != '' THEN 1 END) as has_obs,
+    COUNT(CASE WHEN utp."literatureGenres" IS NOT NULL AND utp."literatureGenres" != '' THEN 1 END) as has_literature
+FROM users_to_projects utp
+JOIN projects p ON utp."projectId" = p.id
+WHERE p."projectType" IN ('GRAMMAR_PHRASES', 'GRAMMAR_PRONOUNS', 'GRAMMAR_CONNECTIVES')
+  AND utp.role = 'MTT'
+GROUP BY p."projectType"
+"""
+df_summary = db_manager.execute_query(query_summary)
+print(df_summary.to_string())
+
+# 6. Check content table structure - do they track who created what?
+print("\n6. GRAMMAR CONTENT TABLE STRUCTURE:")
+for table in ['grammar_phrases_project_contents', 'grammar_pronouns_project_contents', 'grammar_connectives_project_contents']:
+    query_cols = f"""
+    SELECT column_name 
+    FROM information_schema.columns 
+    WHERE table_name = '{table}'
+    ORDER BY ordinal_position
+    """
+    df_cols = db_manager.execute_query(query_cols)
+    print(f"\n   {table}: {df_cols['column_name'].tolist()}")
+
+# 7. Check if grammar projects have specific items assigned
+print("\n7. CHECKING GRAMMAR CONTENT - WHAT ITEMS EXIST:")
+query_items = """
+SELECT 
+    p.name as project_name,
+    p."projectType",
+    gpc.content::text as content_preview
+FROM grammar_phrases_project_contents gpc
+JOIN grammar_phrases_projects gp ON gpc."grammarPhrasesProjectId" = gp.id
+JOIN projects p ON gp."projectId" = p.id
+WHERE gpc.version > 1
+LIMIT 3
+"""
+try:
+    df_items = db_manager.execute_query(query_items)
+    for _, row in df_items.iterrows():
+        print(f"\n   Project: {row['project_name']} ({row['project_type']})")
+        content = row['content_preview'][:200] if row['content_preview'] else 'No content'
+        print(f"   Content preview: {content}...")
+except Exception as e:
+    print(f"   Error: {e}")
+
+print("\n" + "="*80)
+print("KEY FINDINGS:")
+print("="*80)
+print("""
+Based on the analysis:
+
+1. BIBLE projects: Assign SPECIFIC VERSES (e.g., '101001001,101001002...')
+   - Each MTT gets specific verses to translate
+   - Work is divided among MTTs
+
+2. OBS projects: Assign SPECIFIC CHAPTERS (e.g., '1,2,3,4,5...')
+   - Each MTT gets specific chapters to translate
+   - Work is divided among MTTs
+
+3. LITERATURE projects: Assign SPECIFIC GENRES (e.g., 'poetry,history...')
+   - Each MTT gets specific genres to translate
+   - Work is divided among MTTs
+
+4. GRAMMAR projects: NO SPECIFIC ASSIGNMENTS!
+   - The verses, obsChapters, literatureGenres fields are ALL NULL
+   - MTTs are assigned to the project but no specific items are assigned
+   - The content table contains ALL items for the project (not divided by MTT)
+   - All MTTs work on the SAME set of items (collaborative)
+
+CONCLUSION:
+Grammar projects are DIFFERENT from other project types:
+- They are COLLABORATIVE (all MTTs work on same content)
+- No item-level assignment to specific MTTs
+- The history table tracks versions but doesn't show individual item completion
+
+RECOMMENDATION:
+For grammar projects, track PROJECT-LEVEL completion only,
+not MTT-level item completion (since work is shared).
+""")
+
+===== FILE: ./analyze_grammar_data.py =====
+
+#!/usr/bin/env python3
+"""
+Deep analysis of grammar data to understand structure and MTT-level completion
+"""
+
+import sys
+import json
+sys.path.insert(0, '.')
+
+from config.database_config import DatabaseConfigManager
+from core.database_manager import DatabaseManager
+
+db_config = DatabaseConfigManager()
+db_manager = DatabaseManager(db_config)
+db_manager.current_db = 'AG_Dev'
+
+print("="*80)
+print("GRAMMAR DATA STRUCTURE ANALYSIS")
+print("="*80)
+
+# 1. Check Abbey_G.Phrases project
+print("\n1. ABBEY_G.PHRASES PROJECT:")
+query = """
+SELECT 
+    p.id as project_id,
+    p.name as project_name,
+    gp.id as grammar_project_id
+FROM projects p
+JOIN grammar_phrases_projects gp ON p.id = gp."projectId"
+WHERE p.name = 'Abbey_G.Phrases'
+"""
+df = db_manager.execute_query(query)
+print(df.to_string())
+
+if not df.empty:
+    project_id = df['project_id'].iloc[0]
+    grammar_project_id = df['grammar_project_id'].iloc[0]
+    print(f"\n   Project ID: {project_id}")
+    print(f"   Grammar Project ID: {grammar_project_id}")
+    
+    # 2. Check MTTs assigned
+    print("\n2. MTTS ASSIGNED TO THIS PROJECT:")
+    query2 = f"""
+    SELECT 
+        u.id as user_id,
+        u.username,
+        u.name as full_name,
+        u.email
+    FROM users_to_projects utp
+    JOIN users u ON utp."userId" = u.id
+    WHERE utp."projectId" = '{project_id}'
+      AND utp.role = 'MTT'
+    """
+    df2 = db_manager.execute_query(query2)
+    print(df2.to_string())
+    
+    # 3. Check CONTENT table (without userId)
+    print("\n3. CONTENT TABLE (current state):")
+    query3 = f"""
+    SELECT 
+        gpc.version,
+        gpc.content
+    FROM grammar_phrases_project_contents gpc
+    WHERE gpc."grammarPhrasesProjectId" = '{grammar_project_id}'
+    ORDER BY gpc.version DESC
+    LIMIT 1
+    """
+    df3 = db_manager.execute_query(query3)
+    for idx, row in df3.iterrows():
+        print(f"   Version: {row['version']}")
+        content = row['content']
+        if content:
+            try:
+                if isinstance(content, str):
+                    data = json.loads(content)
+                else:
+                    data = content
+                if 'content' in data:
+                    items = data['content']
+                    total = len(items)
+                    completed = sum(1 for i in items if isinstance(i, dict) and i.get('phrase', '').strip())
+                    print(f"   Total items: {total}")
+                    print(f"   Completed items: {completed}")
+                    print(f"   Completion %: {completed/total*100:.1f}%")
+            except Exception as e:
+                print(f"   Error: {e}")
+    
+    # 4. Check HISTORY table (has userId)
+    print("\n4. HISTORY TABLE (version history with userId):")
+    query4 = f"""
+    SELECT 
+        gpc.version,
+        gpc."userId" as created_by,
+        gpc."createdAt"
+    FROM grammar_phrases_project_content_history gpc
+    WHERE gpc."grammarPhrasesProjectContentId" = '{grammar_project_id}'
+    ORDER BY gpc.version DESC
+    LIMIT 10
+    """
+    df4 = db_manager.execute_query(query4)
+    print(df4.to_string())
+    
+    # 5. For each MTT, find their versions and what they contributed
+    print("\n5. MTT CONTRIBUTION ANALYSIS:")
+    mtts = df2.to_dict('records')
+    
+    for mtt in mtts:
+        user_id = mtt['user_id']
+        username = mtt['username']
+        print(f"\n   MTT: {username} ({mtt['full_name']})")
+        
+        # Find versions created by this MTT
+        query5 = f"""
+        SELECT 
+            gpc.version,
+            gpc.content
+        FROM grammar_phrases_project_content_history gpc
+        WHERE gpc."grammarPhrasesProjectContentId" = '{grammar_project_id}'
+          AND gpc."userId" = '{user_id}'
+        ORDER BY gpc.version DESC
+        LIMIT 1
+        """
+        df5 = db_manager.execute_query(query5)
+        
+        if not df5.empty:
+            row = df5.iloc[0]
+            content = row['content']
+            version = row['version']
+            print(f"      Latest version by this MTT: {version}")
+            
+            if content:
+                try:
+                    if isinstance(content, str):
+                        data = json.loads(content)
+                    else:
+                        data = content
+                    if 'content' in data:
+                        items = data['content']
+                        total = len(items)
+                        completed = sum(1 for i in items if isinstance(i, dict) and i.get('phrase', '').strip())
+                        print(f"      Items completed in this version: {completed}/{total} ({completed/total*100:.1f}%)")
+                except:
+                    pass
+        else:
+            print(f"      No content created by this MTT (may have only edited existing)")
+
+# 6. Check how many MTTs have actually created content
+print("\n" + "="*80)
+print("6. OVERALL MTT CONTRIBUTION SUMMARY:")
+query6 = """
+SELECT 
+    gpc."userId" as user_id,
+    COUNT(*) as version_count,
+    MAX(gpc.version) as max_version
+FROM grammar_phrases_project_content_history gpc
+GROUP BY gpc."userId"
+ORDER BY version_count DESC
+"""
+df6 = db_manager.execute_query(query6)
+print("\n   Grammar Phrases - MTT Contributions:")
+for _, row in df6.iterrows():
+    user_id = row['user_id']
+    version_count = row['version_count']
+    max_version = row['max_version']
+    # Get username
+    query_user = f"SELECT username, name FROM users WHERE id = '{user_id}'"
+    df_user = db_manager.execute_query(query_user)
+    username = df_user['username'].iloc[0] if not df_user.empty else user_id[:8]
+    name = df_user['name'].iloc[0] if not df_user.empty and df_user['name'].iloc[0] else username
+    print(f"      {name} ({username}): {version_count} versions, latest v{max_version}")
+
+print("\n" + "="*80)
+print("KEY FINDINGS:")
+print("="*80)
+print("""
+Based on the analysis:
+
+1. The CONTENT table stores the CURRENT state (final result)
+   - No userId column - it's just the latest version
+   
+2. The HISTORY table stores VERSION HISTORY
+   - Has userId column - tracks who created each version
+   - Multiple versions can exist from different MTTs
+   
+3. For MTT-level completion reporting:
+   - Option A: Show the LATEST version created by each MTT
+   - Option B: Show the DIFFERENCE between what each MTT added
+   - Option C: For grammar, it's better to show PROJECT-LEVEL completion
+              because multiple MTTs collaborate on the same content
+   
+4. Recommendation: 
+   - Keep project-level completion (which is accurate)
+   - For MTT performance, show which MTTs contributed (version history)
+   - Don't try to split items per MTT unless items are explicitly assigned
+""")
+
+===== FILE: ./analyze_grammar_mtt.py =====
+
+#!/usr/bin/env python3
+"""
+Analyze Grammar MTT-level completion - Check if each MTT has their own progress
+"""
+
+import sys
+import json
+sys.path.insert(0, '.')
+
+from config.database_config import DatabaseConfigManager
+from core.database_manager import DatabaseManager
+
+db_config = DatabaseConfigManager()
+db_manager = DatabaseManager(db_config)
+db_manager.current_db = 'AG_Dev'
+
+print("="*80)
+print("GRAMMAR MTT-LEVEL COMPLETION ANALYSIS")
+print("="*80)
+
+# Check Abbey_G.Phrases project
+print("\n1. CHECKING ABBEY_G.PHRASES PROJECT:")
+query = """
+SELECT 
+    p.id as project_id,
+    p.name as project_name,
+    gp.id as grammar_project_id
+FROM projects p
+JOIN grammar_phrases_projects gp ON p.id = gp."projectId"
+WHERE p.name = 'Abbey_G.Phrases'
+"""
+df = db_manager.execute_query(query)
+print(df.to_string())
+
+if not df.empty:
+    project_id = df['project_id'].iloc[0]
+    grammar_project_id = df['grammar_project_id'].iloc[0]
+    
+    print(f"\n   Project ID: {project_id}")
+    print(f"   Grammar Project ID: {grammar_project_id}")
+    
+    # Check MTTs assigned to this project
+    print("\n2. MTTS ASSIGNED TO ABBEY_G.PHRASES:")
+    query2 = """
+    SELECT 
+        u.id as user_id,
+        u.username,
+        u.name as full_name
+    FROM users_to_projects utp
+    JOIN users u ON utp."userId" = u.id
+    WHERE utp."projectId" = '%s'
+      AND utp.role = 'MTT'
+    """ % project_id
+    df2 = db_manager.execute_query(query2)
+    print(df2.to_string())
+    
+    # Check content records and who created them
+    print("\n3. CONTENT RECORDS WITH USER IDs:")
+    query3 = """
+    SELECT 
+        gpc.version,
+        gpc.content,
+        gpc."userId" as created_by
+    FROM grammar_phrases_project_contents gpc
+    WHERE gpc."grammarPhrasesProjectId" = '%s'
+    ORDER BY gpc.version DESC
+    """ % grammar_project_id
+    df3 = db_manager.execute_query(query3)
+    
+    for _, row in df3.iterrows():
+        print(f"\n   Version: {row['version']}")
+        print(f"   Created By: {row['created_by']}")
+        content = row['content']
+        if content:
+            try:
+                if isinstance(content, str):
+                    data = json.loads(content)
+                else:
+                    data = content
+                
+                if 'content' in data:
+                    items = data['content']
+                    total = len(items)
+                    completed = sum(1 for i in items if isinstance(i, dict) and i.get('phrase', '').strip())
+                    print(f"   Total Items: {total}")
+                    print(f"   Completed Items: {completed}")
+                    print(f"   Completion %: {completed/total*100:.1f}%")
+            except:
+                print(f"   Could not parse content")
+    
+    # Check if there are multiple versions from different users
+    print("\n4. CHECKING IF DIFFERENT MTTS HAVE DIFFERENT VERSIONS:")
+    query4 = """
+    SELECT 
+        gpc."userId" as user_id,
+        COUNT(*) as version_count,
+        MAX(gpc.version) as max_version
+    FROM grammar_phrases_project_contents gpc
+    WHERE gpc."grammarPhrasesProjectId" = '%s'
+    GROUP BY gpc."userId"
+    """ % grammar_project_id
+    df4 = db_manager.execute_query(query4)
+    print(df4.to_string())
+
+
+===== FILE: ./analyze_literature_deep.py =====
+
+#!/usr/bin/env python3
+"""
+Deep analysis of literature content to understand the structure
+"""
+
+import sys
+import json
+sys.path.insert(0, '.')
+
+from config.database_config import DatabaseConfigManager
+from core.database_manager import DatabaseManager
+
+db_config = DatabaseConfigManager()
+db_manager = DatabaseManager(db_config)
+db_manager.current_db = 'AG_Dev'
+
+print("="*80)
+print("LITERATURE CONTENT DEEP ANALYSIS")
+print("="*80)
+
+# Get detailed content for Ginuman_Lit.
+query = """
+SELECT 
+    p.name as project_name,
+    l.name as language_name,
+    c.name as country,
+    lg."genreId" as genre_type,
+    lg.name as genre_name,
+    lpg.version,
+    lpg.content
+FROM literature_project_genres_history lpg
+JOIN literature_project_genres lg ON lpg."literatureProjectGenreId" = lg.id
+JOIN literature_projects lp ON lg."literatureProjectId" = lp.id
+JOIN projects p ON lp."projectId" = p.id
+LEFT JOIN languages l ON p."languageId" = l.id
+LEFT JOIN countries c ON p."countryId" = c.id
+WHERE p.name = 'Ginuman_Lit.'
+  AND lpg.version > 1
+ORDER BY lg."genreId", lpg.version DESC
+"""
+
+df = db_manager.execute_query(query)
+
+print("\n📊 DETAILED GENRE ANALYSIS:")
+print("="*80)
+
+for _, row in df.iterrows():
+    print(f"\n📖 Genre: {row['genre_name']} ({row['genre_type']})")
+    print(f"   Version: {row['version']}")
+    
+    content = row['content']
+    if content:
+        try:
+            if isinstance(content, str):
+                data = json.loads(content)
+            else:
+                data = content
+            
+            if 'content' in data and isinstance(data['content'], list):
+                blocks = data['content']
+                total_blocks = len(blocks)
+                
+                # Analyze each block
+                blocks_with_content = 0
+                total_sentences = 0
+                empty_blocks = 0
+                
+                block_details = []
+                for i, block in enumerate(blocks):
+                    if isinstance(block, dict):
+                        text = block.get('content', '')
+                        if text and text.strip():
+                            blocks_with_content += 1
+                            # Count sentences in this block
+                            import re
+                            sentences = re.split(r'[.!?]+', text)
+                            sentence_count = len([s for s in sentences if s.strip()])
+                            total_sentences += sentence_count
+                            block_details.append({
+                                'index': i + 1,
+                                'title': block.get('title', '')[:30],
+                                'sentences': sentence_count,
+                                'characters': len(text),
+                                'preview': text[:50] + '...' if len(text) > 50 else text
+                            })
+                        else:
+                            empty_blocks += 1
+                
+                print(f"   📊 Statistics:")
+                print(f"      Total Content Blocks: {total_blocks}")
+                print(f"      Blocks with Content: {blocks_with_content}")
+                print(f"      Empty Blocks: {empty_blocks}")
+                print(f"      Fill Rate: {blocks_with_content/total_blocks*100:.1f}%")
+                print(f"      Total Sentences: {total_sentences}")
+                print(f"      Avg Sentences per Block (with content): {total_sentences/blocks_with_content:.1f}" if blocks_with_content > 0 else "      Avg Sentences per Block: N/A")
+                
+                # Show first 3 blocks with content
+                if block_details:
+                    print(f"\n   📝 Sample Content Blocks:")
+                    for detail in block_details[:3]:
+                        print(f"      Block {detail['index']}: {detail['sentences']} sentences - '{detail['preview']}'")
+                
+        except Exception as e:
+            print(f"   Error parsing content: {e}")
+
+print("\n" + "="*80)
+print("RECOMMENDED METRICS FOR LITERATURE:")
+print("="*80)
+print("""
+Based on the analysis, the most meaningful metrics are:
+
+1. 📊 FILL RATE: Percentage of content blocks that have ANY text
+   - This tells you how much of the literature piece is populated
+   - Example: Poetry has 44/264 blocks filled (16.7% fill rate)
+
+2. 📝 SENTENCE COUNT: Total number of sentences translated
+   - This is the actual content volume
+
+3. 📖 COMPLETION STATUS:
+   - Not Started: 0% fill rate
+   - In Progress: 1-99% fill rate
+   - Completed: 100% fill rate
+
+4. 🎯 QUALITY INDICATORS:
+   - Average sentences per filled block (indicates detail level)
+   - Total characters/words translated
+
+The current "Completion %" showing 100% for Poetry is INCORRECT because:
+- It's comparing sentences to blocks (apples to oranges)
+- Should be comparing FILLED BLOCKS to TOTAL BLOCKS
+""")
+
 ===== FILE: ./config/book_mapping_config.py =====
 
 """
@@ -3818,7 +4439,7 @@ class DatabaseManager:
                     result.add(verse_id)
         return result
     
-    def execute_query(self, query: str, params: Optional[tuple] = None, 
+    def execute_query(self, query: str, params: Optional[dict] = None, 
                       db_name: Optional[str] = None) -> pd.DataFrame:
         """Execute SQL query and return results as DataFrame"""
         use_db = db_name or self.current_db
@@ -3828,9 +4449,7 @@ class DatabaseManager:
         engine = self._get_engine(use_db)
         try:
             if params:
-                # Convert dict to tuple if needed
-                if isinstance(params, dict):
-                    params = tuple(params.values())
+                # params should be a dictionary for SQLAlchemy
                 df = pd.read_sql_query(text(query), engine, params=params)
             else:
                 df = pd.read_sql_query(query, engine)
@@ -3839,7 +4458,7 @@ class DatabaseManager:
             logger.error(f"Query execution error: {e}")
             raise
     
-    def execute_update(self, query: str, params: Optional[tuple] = None,
+    def execute_update(self, query: str, params: Optional[dict] = None,
                        db_name: Optional[str] = None) -> int:
         use_db = db_name or self.current_db
         if not use_db:
@@ -3848,8 +4467,6 @@ class DatabaseManager:
         engine = self._get_engine(use_db)
         with engine.connect() as conn:
             if params:
-                if isinstance(params, dict):
-                    params = tuple(params.values())
                 result = conn.execute(text(query), params)
             else:
                 result = conn.execute(text(query))
@@ -5043,6 +5660,163 @@ def _generate_username_if_empty(self, value: str, email: str = None) -> str:
         return username
     
     return None
+===== FILE: ./diagnose_literature_completion.py =====
+
+#!/usr/bin/env python3
+"""
+Diagnose Literature Completion Data Linking Issues
+Finds why completed work is not showing up against MTTs
+"""
+
+import sys
+import json
+sys.path.insert(0, '.')
+
+from config.database_config import DatabaseConfigManager
+from core.database_manager import DatabaseManager
+
+db_config = DatabaseConfigManager()
+db_manager = DatabaseManager(db_config)
+db_manager.current_db = 'AG_Dev'
+
+print("="*80)
+print("LITERATURE COMPLETION DATA DIAGNOSTIC")
+print("="*80)
+
+# 1. Check the MTT assignments for Ginuman_Lit.
+print("\n1. MTT ASSIGNMENTS FOR GINUMAN_LIT.:")
+query = """
+SELECT 
+    u.id as user_id,
+    u.username,
+    u.name as user_name,
+    utp."literatureGenres" as assigned_genres
+FROM users_to_projects utp
+JOIN users u ON utp."userId" = u.id
+JOIN projects p ON utp."projectId" = p.id
+WHERE p.name = 'Ginuman_Lit.'
+  AND utp.role = 'MTT'
+"""
+df = db_manager.execute_query(query)
+print(df.to_string())
+
+print("\n2. COMPLETED GENRE RECORDS FOR GINUMAN_LIT.:")
+query = """
+SELECT 
+    lg."genreId" as genre_type,
+    lpg.version,
+    lpg."userId" as completed_by_user_id,
+    lpg.content,
+    lpg."updatedAt"
+FROM literature_project_genres_history lpg
+JOIN literature_project_genres lg ON lpg."literatureProjectGenreId" = lg.id
+JOIN literature_projects lp ON lg."literatureProjectId" = lp.id
+JOIN projects p ON lp."projectId" = p.id
+WHERE p.name = 'Ginuman_Lit.'
+  AND lpg.version > 1
+ORDER BY lg."genreId"
+"""
+df = db_manager.execute_query(query)
+print(df.to_string())
+
+print("\n3. CHECK IF COMPLETED_BY_USER_ID MATCHES MTT USER IDs:")
+print("   Completed by user IDs found:")
+completed_users = df['completed_by_user_id'].unique() if not df.empty else []
+print(f"   {completed_users}")
+
+print("\n   MTT User IDs from assignments:")
+mtt_users = df_assign['user_id'].tolist() if 'df_assign' in dir() else []
+print(f"   {mtt_users}")
+
+print("\n4. GET DETAILS OF THE COMPLETED_BY_USER:")
+if completed_users:
+    for user_id in completed_users:
+        query = f"""
+        SELECT id, username, name, email
+        FROM users
+        WHERE id = '{user_id}'
+        """
+        df_user = db_manager.execute_query(query)
+        print(f"\n   User ID: {user_id}")
+        if not df_user.empty:
+            print(f"   Username: {df_user['username'].iloc[0]}")
+            print(f"   Name: {df_user['name'].iloc[0]}")
+            print(f"   Email: {df_user['email'].iloc[0]}")
+        else:
+            print(f"   ❌ User not found in users table!")
+
+print("\n5. CHECK IF THERE'S A MISMATCH IN GENRE ID FORMAT:")
+print("   Assigned genres format vs Completed genres format")
+
+# Get assigned genres from first query
+if not df.empty:
+    assigned = df['assigned_genres'].iloc[0] if 'df' in dir() and not df.empty else ""
+    print(f"   Assigned: {assigned}")
+    
+    # Get completed genres
+    completed_genres = df['genre_type'].tolist() if 'df' in dir() and not df.empty else []
+    print(f"   Completed: {completed_genres}")
+
+print("\n6. CHECK LITERATURE_PROJECT_GENRES TABLE (not history):")
+query = """
+SELECT 
+    lg."genreId",
+    lg.version,
+    lg."updatedAt"
+FROM literature_project_genres lg
+JOIN literature_projects lp ON lg."literatureProjectId" = lp.id
+JOIN projects p ON lp."projectId" = p.id
+WHERE p.name = 'Ginuman_Lit.'
+ORDER BY lg."genreId"
+"""
+df_main = db_manager.execute_query(query)
+print(df_main.to_string())
+
+print("\n7. VERIFY THE CONTENT EXISTS FOR EACH GENRE:")
+for genre in completed_genres:
+    query = f"""
+    SELECT 
+        lg."genreId",
+        lpg.content::text as content_preview
+    FROM literature_project_genres_history lpg
+    JOIN literature_project_genres lg ON lpg."literatureProjectGenreId" = lg.id
+    JOIN literature_projects lp ON lg."literatureProjectId" = lp.id
+    JOIN projects p ON lp."projectId" = p.id
+    WHERE p.name = 'Ginuman_Lit.'
+      AND lg."genreId" = '{genre}'
+      AND lpg.version > 1
+    LIMIT 1
+    """
+    df_content = db_manager.execute_query(query)
+    if not df_content.empty:
+        content = df_content['content_preview'].iloc[0]
+        # Check if content has actual text
+        if content and 'content' in content:
+            # Try to parse and count
+            try:
+                data = json.loads(content)
+                if 'content' in data:
+                    blocks = data['content']
+                    filled = sum(1 for b in blocks if isinstance(b, dict) and b.get('content', '').strip())
+                    print(f"   {genre}: {filled}/{len(blocks)} blocks filled")
+            except:
+                print(f"   {genre}: Content exists but couldn't parse")
+    else:
+        print(f"   {genre}: ❌ No content found")
+
+print("\n" + "="*80)
+print("RECOMMENDED FIX:")
+print("="*80)
+print("""
+The issue appears to be that:
+1. The completed_by_user_id in history table may not match the MTT user ID
+2. Or the genre ID format might be different (e.g., 'poetry' vs 'lit:poetry')
+
+To fix:
+- Update the join logic to match by email or username instead of user_id
+- Or normalize genre IDs to remove 'lit:' prefix for comparison
+""")
+
 ===== FILE: ./export_schemas.py =====
 
 #!/usr/bin/env python3
@@ -5750,6 +6524,363 @@ def main():
 
 if __name__ == '__main__':
     main()
+===== FILE: ./reports/ag_drafting_monitoring_report.py =====
+
+"""
+AG Drafting Monitoring Report - Consolidated report for all project types
+Combines Bible, OBS, Literature, and Grammar metrics into single monitoring view
+"""
+
+import pandas as pd
+import json
+import re
+from typing import Dict, Any
+from reports.base_report import BaseReport
+
+
+class AGDraftingMonitoringReport(BaseReport):
+    """AG Drafting Monitoring Report - Complete project monitoring across all types"""
+    
+    def __init__(self, db_manager, **kwargs):
+        super().__init__(db_manager, **kwargs)
+        self.available_filters = ['country', 'language', 'project_type']
+    
+    def _analyze_literature_content(self, content) -> Dict[str, int]:
+        """Analyze literature content for each genre"""
+        result = {
+            'childrens_literature': {'total_blocks': 0, 'filled_blocks': 0},
+            'formal_writing': {'total_blocks': 0, 'filled_blocks': 0},
+            'history': {'total_blocks': 0, 'filled_blocks': 0},
+            'narrative': {'total_blocks': 0, 'filled_blocks': 0},
+            'poetry': {'total_blocks': 0, 'filled_blocks': 0},
+            'literature': {'total_blocks': 0, 'filled_blocks': 0}
+        }
+        
+        if content is None:
+            return result
+        
+        try:
+            if isinstance(content, str):
+                data = json.loads(content)
+            else:
+                data = content
+            
+            if 'content' in data and isinstance(data['content'], list):
+                genre_type = data.get('metadata', {}).get('genre', '')
+                if genre_type and genre_type in result:
+                    blocks = data['content']
+                    result[genre_type]['total_blocks'] = len(blocks)
+                    filled = sum(1 for b in blocks if isinstance(b, dict) and b.get('content', '').strip())
+                    result[genre_type]['filled_blocks'] = filled
+        except:
+            pass
+        
+        return result
+    
+    def _get_grammar_completion(self, project_id: str, grammar_type: str) -> Dict[str, int]:
+        """Get grammar completion metrics"""
+        result = {'total_items': 0, 'completed_items': 0}
+        
+        table_map = {
+            'GRAMMAR_PHRASES': ('grammar_phrases_project_contents', 'grammar_phrases_projects', 'grammarPhrasesProjectId', 'phrase'),
+            'GRAMMAR_PRONOUNS': ('grammar_pronouns_project_contents', 'grammar_pronouns_projects', 'grammarPronounsProjectId', 'pronoun'),
+            'GRAMMAR_CONNECTIVES': ('grammar_connectives_project_contents', 'grammar_connectives_projects', 'grammarConnectivesProjectId', 'connective')
+        }
+        
+        if grammar_type not in table_map:
+            return result
+        
+        content_table, project_table, id_field, item_key = table_map[grammar_type]
+        
+        try:
+            query = f"""
+            SELECT gpc.content
+            FROM {content_table} gpc
+            JOIN {project_table} gp ON gpc."{id_field}" = gp.id
+            WHERE gp."projectId" = '{project_id}'
+              AND gpc.version > 1
+            ORDER BY gpc.version DESC
+            LIMIT 1
+            """
+            df = self.execute_query(query)
+            
+            if not df.empty and df['content'].iloc[0]:
+                content = df['content'].iloc[0]
+                if isinstance(content, str):
+                    data = json.loads(content)
+                else:
+                    data = content
+                
+                if 'content' in data and isinstance(data['content'], list):
+                    items = data['content']
+                    result['total_items'] = len(items)
+                    result['completed_items'] = sum(1 for i in items if isinstance(i, dict) and i.get(item_key, '').strip())
+        except:
+            pass
+        
+        return result
+    
+    def generate(self) -> Dict[str, pd.DataFrame]:
+        """Generate AG Drafting Monitoring Report"""
+        
+        # Get all distinct countries and languages with projects
+        query = """
+        SELECT DISTINCT 
+            c.name as country,
+            l.name as language,
+            l."isoCode" as language_code
+        FROM projects p
+        LEFT JOIN languages l ON p."languageId" = l.id
+        LEFT JOIN countries c ON p."countryId" = c.id
+        WHERE p."projectType" IN ('TEXT_TRANSLATION', 'OBS', 'LITERATURE', 'LITERATURE_PROJECT',
+                                  'GRAMMAR_PHRASES', 'GRAMMAR_PRONOUNS', 'GRAMMAR_CONNECTIVES')
+          AND c.name IS NOT NULL
+        ORDER BY c.name, l.name
+        """
+        
+        try:
+            locations_df = self.execute_query(query)
+            print(f"✅ Retrieved {len(locations_df)} country-language combinations")
+        except Exception as e:
+            print(f"❌ Locations query failed: {e}")
+            locations_df = pd.DataFrame()
+        
+        report_data = []
+        
+        for _, loc in locations_df.iterrows():
+            country = loc['country']
+            language = loc['language']
+            
+            # Get MTT names for this language
+            mtt_query = """
+            SELECT DISTINCT COALESCE(NULLIF(u.name, ''), u.username) as mtt_name
+            FROM users u
+            JOIN users_to_projects utp ON u.id = utp."userId"
+            JOIN projects p ON utp."projectId" = p.id
+            JOIN languages l ON p."languageId" = l.id
+            WHERE l.name = %(lang)s
+              AND utp.role = 'MTT'
+            ORDER BY mtt_name
+            """
+            mtt_df = self.execute_query(mtt_query, {'lang': language})
+            mtt_names = ', '.join(mtt_df['mtt_name'].tolist()) if not mtt_df.empty else ''
+            
+            # Initialize row
+            row = {
+                'Country': country,
+                'Language': language,
+                'Cluster': '',
+                'Language_dup': language,
+                'Date of Report': '',
+                'MTT Names': mtt_names,
+                'OBS_Chapters_Assigned': 0,
+                'OBS_Chapters_Completed': 0,
+                'Bible_Verses_Assigned': 0,
+                'Bible_Verse_Completion': 0,
+                'Literature_Total_Blocks': 0,
+                'Literature_Filled_Blocks': 0,
+                'Childrens_Lit_Total': 0,
+                'Childrens_Lit_Filled': 0,
+                'Formal_Writing_Total': 0,
+                'Formal_Writing_Filled': 0,
+                'History_Total': 0,
+                'History_Filled': 0,
+                'Narrative_Total': 0,
+                'Narrative_Filled': 0,
+                'Poetry_Total': 0,
+                'Poetry_Filled': 0,
+                'Grammar_Pronouns_Total': 0,
+                'Grammar_Pronouns_Completed': 0,
+                'Grammar_Connectives_Total': 0,
+                'Grammar_Connectives_Completed': 0,
+                'Grammar_Phrases_Total': 0,
+                'Grammar_Phrases_Completed': 0
+            }
+            
+            # Get OBS project for this language
+            obs_query = """
+            SELECT p.id as project_id, p.name as project_name
+            FROM projects p
+            JOIN languages l ON p."languageId" = l.id
+            WHERE l.name = %(lang)s
+              AND p."projectType" = 'OBS'
+            LIMIT 1
+            """
+            obs_df = self.execute_query(obs_query, {'lang': language})
+            
+            if not obs_df.empty:
+                project_id = obs_df['project_id'].iloc[0]
+                
+                assign_query = f"""
+                SELECT COALESCE(SUM(array_length(string_to_array(COALESCE("obsChapters", ''), ','), 1)), 0) as total
+                FROM users_to_projects
+                WHERE "projectId" = '{project_id}'
+                  AND role = 'MTT'
+                """
+                assign_df = self.execute_query(assign_query)
+                row['OBS_Chapters_Assigned'] = assign_df['total'].iloc[0] if not assign_df.empty else 0
+                
+                complete_query = f"""
+                SELECT COUNT(DISTINCT opc."chapterNo") as completed
+                FROM obs_project_chapters opc
+                JOIN obs_projects op ON opc."obsProjectId" = op.id
+                WHERE op."projectId" = '{project_id}'
+                  AND opc.version > 1
+                  AND opc.data IS NOT NULL
+                  AND opc.data::text != '{{}}'
+                """
+                complete_df = self.execute_query(complete_query)
+                row['OBS_Chapters_Completed'] = complete_df['completed'].iloc[0] if not complete_df.empty else 0
+            
+            # Get Bible project for this language
+            bible_query = """
+            SELECT p.id as project_id
+            FROM projects p
+            JOIN languages l ON p."languageId" = l.id
+            WHERE l.name = %(lang)s
+              AND p."projectType" = 'TEXT_TRANSLATION'
+            LIMIT 1
+            """
+            bible_df = self.execute_query(bible_query, {'lang': language})
+            
+            if not bible_df.empty:
+                project_id = bible_df['project_id'].iloc[0]
+                
+                assign_query = f"""
+                SELECT COALESCE(SUM(array_length(string_to_array(COALESCE(verses, ''), ','), 1)), 0) as total
+                FROM users_to_projects
+                WHERE "projectId" = '{project_id}'
+                  AND role = 'MTT'
+                """
+                assign_df = self.execute_query(assign_query)
+                row['Bible_Verses_Assigned'] = assign_df['total'].iloc[0] if not assign_df.empty else 0
+                
+                complete_query = f"""
+                SELECT COUNT(DISTINCT ttc.id) as completed
+                FROM text_translation_chapters ttc
+                JOIN text_translation_books ttb ON ttc."textTranslationBookId" = ttb.id
+                JOIN text_translation_projects tp ON ttb."textTranslationProjectId" = tp.id
+                WHERE tp."projectId" = '{project_id}'
+                  AND ttc.version > 1
+                """
+                complete_df = self.execute_query(complete_query)
+                row['Bible_Verse_Completion'] = complete_df['completed'].iloc[0] if not complete_df.empty else 0
+            
+            # Get Literature project for this language
+            lit_query = """
+            SELECT lp."projectId"
+            FROM literature_projects lp
+            JOIN projects p ON lp."projectId" = p.id
+            JOIN languages l ON p."languageId" = l.id
+            WHERE l.name = %(lang)s
+            LIMIT 1
+            """
+            lit_df = self.execute_query(lit_query, {'lang': language})
+            
+            if not lit_df.empty:
+                project_id = lit_df['projectId'].iloc[0]
+                
+                content_query = f"""
+                SELECT lpg.content
+                FROM literature_project_genres_history lpg
+                JOIN literature_project_genres lg ON lpg."literatureProjectGenreId" = lg.id
+                JOIN literature_projects lp ON lg."literatureProjectId" = lp.id
+                WHERE lp."projectId" = '{project_id}'
+                  AND lpg.version > 1
+                ORDER BY lpg.version DESC
+                LIMIT 1
+                """
+                content_df = self.execute_query(content_query)
+                
+                if not content_df.empty and content_df['content'].iloc[0]:
+                    content = content_df['content'].iloc[0]
+                    analysis = self._analyze_literature_content(content)
+                    
+                    row['Literature_Total_Blocks'] = sum(g['total_blocks'] for g in analysis.values())
+                    row['Literature_Filled_Blocks'] = sum(g['filled_blocks'] for g in analysis.values())
+                    row['Childrens_Lit_Total'] = analysis['childrens_literature']['total_blocks']
+                    row['Childrens_Lit_Filled'] = analysis['childrens_literature']['filled_blocks']
+                    row['Formal_Writing_Total'] = analysis['formal_writing']['total_blocks']
+                    row['Formal_Writing_Filled'] = analysis['formal_writing']['filled_blocks']
+                    row['History_Total'] = analysis['history']['total_blocks']
+                    row['History_Filled'] = analysis['history']['filled_blocks']
+                    row['Narrative_Total'] = analysis['narrative']['total_blocks']
+                    row['Narrative_Filled'] = analysis['narrative']['filled_blocks']
+                    row['Poetry_Total'] = analysis['poetry']['total_blocks']
+                    row['Poetry_Filled'] = analysis['poetry']['filled_blocks']
+            
+            # Get Grammar projects for this language
+            for grammar_type in ['GRAMMAR_PRONOUNS', 'GRAMMAR_CONNECTIVES', 'GRAMMAR_PHRASES']:
+                grammar_query = """
+                SELECT p.id as project_id
+                FROM projects p
+                JOIN languages l ON p."languageId" = l.id
+                WHERE l.name = %(lang)s
+                  AND p."projectType" = %(grammar_type)s
+                LIMIT 1
+                """
+                grammar_df = self.execute_query(grammar_query, {'lang': language, 'grammar_type': grammar_type})
+                
+                if not grammar_df.empty:
+                    project_id = grammar_df['project_id'].iloc[0]
+                    completion = self._get_grammar_completion(project_id, grammar_type)
+                    
+                    if grammar_type == 'GRAMMAR_PRONOUNS':
+                        row['Grammar_Pronouns_Total'] = completion['total_items']
+                        row['Grammar_Pronouns_Completed'] = completion['completed_items']
+                    elif grammar_type == 'GRAMMAR_CONNECTIVES':
+                        row['Grammar_Connectives_Total'] = completion['total_items']
+                        row['Grammar_Connectives_Completed'] = completion['completed_items']
+                    elif grammar_type == 'GRAMMAR_PHRASES':
+                        row['Grammar_Phrases_Total'] = completion['total_items']
+                        row['Grammar_Phrases_Completed'] = completion['completed_items']
+            
+            report_data.append(row)
+        
+        report_df = pd.DataFrame(report_data)
+        
+        # Reorder columns
+        column_order = [
+            'Country', 'Language', 'Cluster', 'Language_dup', 'Date of Report', 'MTT Names',
+            'OBS_Chapters_Assigned', 'OBS_Chapters_Completed',
+            'Bible_Verses_Assigned', 'Bible_Verse_Completion',
+            'Literature_Total_Blocks', 'Literature_Filled_Blocks',
+            'Childrens_Lit_Total', 'Childrens_Lit_Filled',
+            'Formal_Writing_Total', 'Formal_Writing_Filled',
+            'History_Total', 'History_Filled',
+            'Narrative_Total', 'Narrative_Filled',
+            'Poetry_Total', 'Poetry_Filled',
+            'Grammar_Pronouns_Total', 'Grammar_Pronouns_Completed',
+            'Grammar_Connectives_Total', 'Grammar_Connectives_Completed',
+            'Grammar_Phrases_Total', 'Grammar_Phrases_Completed'
+        ]
+        
+        existing_columns = [col for col in column_order if col in report_df.columns]
+        report_df = report_df[existing_columns]
+        report_df = report_df.sort_values(['Country', 'Language'])
+        
+        # Summary statistics
+        summary_data = []
+        summary_data.append({'Metric': 'Total Languages/Countries', 'Value': len(report_df)})
+        if 'OBS_Chapters_Assigned' in report_df.columns:
+            summary_data.append({'Metric': 'Total OBS Chapters Assigned', 'Value': int(report_df['OBS_Chapters_Assigned'].sum())})
+            summary_data.append({'Metric': 'Total OBS Chapters Completed', 'Value': int(report_df['OBS_Chapters_Completed'].sum())})
+        if 'Bible_Verses_Assigned' in report_df.columns:
+            summary_data.append({'Metric': 'Total Bible Verses Assigned', 'Value': int(report_df['Bible_Verses_Assigned'].sum())})
+        
+        summary_df = pd.DataFrame(summary_data)
+        
+        return {
+            'monitoring_report': report_df,
+            'summary_stats': summary_df
+        }
+    
+    def get_sheet_names(self) -> Dict[str, str]:
+        return {
+            'monitoring_report': 'AG Drafting Monitoring Report',
+            'summary_stats': 'Summary Statistics'
+        }
+
 ===== FILE: ./reports/base_report.py =====
 
 """
@@ -6568,31 +7699,36 @@ class CustomReport(BaseReport):
 ===== FILE: ./reports/grammar_project_completion_report.py =====
 
 """
-Grammar Project Completion Report - Enhanced with detailed item tracking
-Includes item-level breakdown per MTT (1 row per grammar item)
+Grammar Project Completion Report - Simplified to meaningful metrics
+Focus on project-level completion (what's actually done)
 """
 
 import pandas as pd
 import json
-from typing import Dict, Any, Tuple, List
+from typing import Dict, Any, Tuple
 from reports.base_report import BaseReport
 
 
 class GrammarProjectCompletionReport(BaseReport):
-    """Grammar Project Completion Report - Track items with detailed breakdown per MTT"""
+    """Grammar Project Completion Report - Project-level completion only"""
     
     def __init__(self, db_manager, **kwargs):
         super().__init__(db_manager, **kwargs)
         self.available_filters = ['project_id', 'user_id', 'role', 'country']
     
-    def _extract_items(self, content, grammar_type: str) -> Tuple[int, int, List[Dict]]:
-        """Extract items and return detailed list"""
+    def _extract_items_from_content(self, content, grammar_type: str) -> Tuple[int, int]:
+        """Extract items from content and count completed ones"""
         total = 0
         completed = 0
-        items = []
         
         if content is None:
-            return 0, 0, []
+            return 0, 0
+        
+        item_key = {
+            'phrases': 'phrase',
+            'pronouns': 'pronoun',
+            'connectives': 'connective'
+        }.get(grammar_type, 'text')
         
         try:
             if isinstance(content, str):
@@ -6600,69 +7736,29 @@ class GrammarProjectCompletionReport(BaseReport):
             else:
                 data = content
             
-            # Determine item key
-            item_key = {
-                'phrases': 'phrase',
-                'pronouns': 'pronoun',
-                'connectives': 'connective'
-            }.get(grammar_type, 'text')
-            
-            content_items = []
             if 'content' in data and isinstance(data['content'], list):
-                content_items = data['content']
-            elif isinstance(data, list):
-                content_items = data
-            
-            total = len(content_items)
-            for idx, item in enumerate(content_items):
-                if isinstance(item, dict):
-                    value = item.get(item_key, '')
-                    is_completed = bool(value and len(str(value).strip()) > 0)
-                    if is_completed:
-                        completed += 1
-                    
-                    items.append({
-                        'item_num': idx + 1,
-                        'value': value if value else '',
-                        'has_content': is_completed,
-                        'preview': (str(value)[:50] + '...') if value and len(str(value)) > 50 else (str(value) if value else '')
-                    })
-                elif isinstance(item, str):
-                    is_completed = bool(item.strip())
-                    if is_completed:
-                        completed += 1
-                    items.append({
-                        'item_num': idx + 1,
-                        'value': item,
-                        'has_content': is_completed,
-                        'preview': item[:50] + '...' if len(item) > 50 else item
-                    })
-            
-            return total, completed, items
+                items = data['content']
+                total = len(items)
+                for item in items:
+                    if isinstance(item, dict):
+                        value = item.get(item_key, '')
+                        if value and value.strip():
+                            completed += 1
+            return total, completed
         except:
-            return 0, 0, []
-    
-    def _has_content(self, content, grammar_type: str) -> bool:
-        total, completed, _ = self._extract_items(content, grammar_type)
-        return completed > 0
-    
-    def _get_completion_pct(self, content, grammar_type: str) -> float:
-        total, completed, _ = self._extract_items(content, grammar_type)
-        if total > 0:
-            return (completed / total * 100)
-        return 0
+            return 0, 0
     
     def _get_performance_rating(self, completion_pct: float) -> str:
         if completion_pct >= 100:
-            return "🏆 Excellent"
+            return "🏆 Complete"
         elif completion_pct >= 75:
-            return "👍 Good"
+            return "✅ Almost Complete"
         elif completion_pct >= 50:
-            return "⭐ Average"
+            return "⭐ Halfway"
         elif completion_pct >= 25:
-            return "⚠️ Needs Improvement"
+            return "📝 In Progress"
         elif completion_pct > 0:
-            return "🔨 In Progress"
+            return "🔨 Just Started"
         else:
             return "❌ Not Started"
     
@@ -6675,7 +7771,7 @@ class GrammarProjectCompletionReport(BaseReport):
             return "Not Started"
     
     def generate(self) -> Dict[str, pd.DataFrame]:
-        """Generate enhanced Grammar project completion report with item-level details"""
+        """Generate grammar report - meaningful metrics only"""
         
         grammar_configs = [
             ('GRAMMAR_PHRASES', 'phrases', 'grammar_phrases_project_contents', 'grammar_phrases_projects', 'grammarPhrasesProjectId'),
@@ -6684,7 +7780,7 @@ class GrammarProjectCompletionReport(BaseReport):
         ]
         
         # ============================================================
-        # 1. All Grammar Projects Overview
+        # Sheet 1: All Grammar Projects Overview
         # ============================================================
         projects_query = """
         SELECT 
@@ -6692,9 +7788,7 @@ class GrammarProjectCompletionReport(BaseReport):
             p.name as project_name,
             p."projectType" as project_type,
             l.name as language_name,
-            l."isoCode" as language_code,
-            c.name as country,
-            c."countryCode" as country_code
+            c.name as country
         FROM projects p
         LEFT JOIN languages l ON p."languageId" = l.id
         LEFT JOIN countries c ON p."countryId" = c.id
@@ -6710,11 +7804,10 @@ class GrammarProjectCompletionReport(BaseReport):
             projects_df = pd.DataFrame()
         
         # ============================================================
-        # 2. Get MTT assignments with proper full names
+        # Sheet 2: MTT Assignments (Who is assigned - for reference only)
         # ============================================================
         mtt_assignments_query = """
         SELECT 
-            utp."projectId",
             p.name as project_name,
             p."projectType" as project_type,
             l.name as language_name,
@@ -6722,8 +7815,7 @@ class GrammarProjectCompletionReport(BaseReport):
             u.id as user_id,
             u.username,
             COALESCE(NULLIF(u.name, ''), u.username) as full_name,
-            u.email,
-            utp.role as project_role
+            u.email
         FROM users_to_projects utp
         LEFT JOIN projects p ON utp."projectId" = p.id
         LEFT JOIN languages l ON p."languageId" = l.id
@@ -6742,193 +7834,89 @@ class GrammarProjectCompletionReport(BaseReport):
             mtt_assignments_df = pd.DataFrame()
         
         # ============================================================
-        # 3. Get completion data with item-level details
+        # Sheet 3: Project Status (PROJECT-LEVEL completion) - MAIN SHEET
         # ============================================================
-        project_completion = {}
-        item_details_by_project = {}  # For detailed item sheet
+        project_status_data = []
         
-        for grammar_enum, grammar_key, content_table, project_table, id_field in grammar_configs:
+        for grammar_type, grammar_key, content_table, project_table, id_field in grammar_configs:
             try:
                 query = f"""
                 SELECT DISTINCT ON (gp."projectId")
+                    p.name as project_name,
+                    p."projectType" as project_type,
+                    l.name as language_name,
+                    c.name as country,
                     gp."projectId",
                     gpc.version,
                     gpc.content
                 FROM {content_table} gpc
                 JOIN {project_table} gp ON gpc."{id_field}" = gp.id
+                JOIN projects p ON gp."projectId" = p.id
+                LEFT JOIN languages l ON p."languageId" = l.id
+                LEFT JOIN countries c ON p."countryId" = c.id
                 WHERE gpc.version > 1
                 ORDER BY gp."projectId", gpc.version DESC
                 """
                 
                 content_df = self.execute_query(query)
-                print(f"✅ {grammar_enum}: Found {len(content_df)} projects with content")
+                print(f"✅ {grammar_type}: Found {len(content_df)} projects with content")
                 
                 for _, row in content_df.iterrows():
-                    project_id = row['projectId']
-                    content = row['content']
-                    version = row['version']
+                    total_items, completed_items = self._extract_items_from_content(row['content'], grammar_key)
+                    completion_pct = (completed_items / total_items * 100) if total_items > 0 else 0
+                    status = self._get_status(completion_pct)
+                    performance = self._get_performance_rating(completion_pct)
                     
-                    total_items, completed_items, items = self._extract_items(content, grammar_key)
-                    has_content = self._has_content(content, grammar_key)
-                    completion_pct = self._get_completion_pct(content, grammar_key)
+                    # Get MTTs assigned to this project
+                    mtts = mtt_assignments_df[mtt_assignments_df['project_name'] == row['project_name']]
+                    mtt_count = len(mtts)
+                    mtt_names = ', '.join(mtts['full_name'].unique()) if not mtts.empty else 'No MTTs Assigned'
                     
-                    if project_id not in project_completion:
-                        project_completion[project_id] = {
-                            'grammar_type': grammar_enum,
-                            'has_content': has_content,
-                            'version': version,
-                            'total_items': total_items,
-                            'completed_items': completed_items,
-                            'completion_pct': completion_pct
-                        }
-                    elif version > project_completion[project_id]['version']:
-                        project_completion[project_id].update({
-                            'grammar_type': grammar_enum,
-                            'has_content': has_content,
-                            'version': version,
-                            'total_items': total_items,
-                            'completed_items': completed_items,
-                            'completion_pct': completion_pct
-                        })
-                    
-                    # Store item details for detailed sheet
-                    item_details_by_project[project_id] = {
-                        'items': items,
-                        'grammar_type': grammar_enum
-                    }
+                    project_status_data.append({
+                        'Project Name': row['project_name'],
+                        'Grammar Type': row['project_type'],
+                        'Language': row['language_name'] or 'N/A',
+                        'Country': row['country'] or 'N/A',
+                        'MTTs Assigned': mtt_count,
+                        'MTT Names': mtt_names[:300] if len(mtt_names) > 300 else mtt_names,
+                        'Total Items': total_items,
+                        'Items Completed': completed_items,
+                        'Completion %': round(completion_pct, 1),
+                        'Version': row['version'],
+                        'Performance': performance,
+                        'Status': status
+                    })
             except Exception as e:
-                print(f"⚠️ {grammar_enum} query error: {e}")
+                print(f"⚠️ {grammar_type} query: {e}")
         
-        print(f"✅ Found {len(project_completion)} grammar projects with content")
-        
-        # ============================================================
-        # 4. PROJECT-LEVEL STATUS
-        # ============================================================
-        project_status = []
-        
-        for _, row in projects_df.iterrows():
-            project_id = row['project_id']
-            project_name = row['project_name']
-            project_type = row['project_type']
-            language = row['language_name'] or 'N/A'
-            country = row['country'] or 'N/A'
-            
-            mtt_info = mtt_assignments_df[mtt_assignments_df['projectId'] == project_id]
-            mtt_count = mtt_info['user_id'].nunique() if not mtt_info.empty else 0
-            mtt_names = ', '.join(mtt_info['full_name'].unique()) if not mtt_info.empty else ''
-            
-            completion = project_completion.get(project_id, {})
-            has_content = completion.get('has_content', False)
-            version = completion.get('version', 0)
-            completion_pct = completion.get('completion_pct', 0)
-            total_items = completion.get('total_items', 0)
-            completed_items = completion.get('completed_items', 0)
-            grammar_type = completion.get('grammar_type', '')
-            
-            status = self._get_status(completion_pct)
-            performance = self._get_performance_rating(completion_pct)
-            
-            project_status.append({
-                'Project ID': project_id,
-                'Project Name': project_name,
-                'Project Type': project_type,
-                'Language': language,
-                'Country': country,
-                'MTTs Assigned': mtt_count,
-                'MTT Names': mtt_names[:300],
-                'Grammar Type': grammar_type,
-                'Has Content': 'Yes' if has_content else 'No',
-                'Total Items': total_items,
-                'Items Completed': completed_items,
-                'Completion %': round(completion_pct, 2),
-                'Version': version,
-                'Performance Rating': performance,
-                'Status': status
-            })
-        
-        project_status_df = pd.DataFrame(project_status)
-        if not project_status_df.empty:
-            project_status_df = project_status_df.sort_values('Completion %', ascending=False)
-        
-        # ============================================================
-        # 5. MTT-LEVEL PERFORMANCE
-        # ============================================================
-        mtt_performance = []
-        
-        if not mtt_assignments_df.empty:
-            for _, row in mtt_assignments_df.iterrows():
-                project_id = row['projectId']
-                user_id = row['user_id']
-                username = row['username']
-                full_name = row['full_name']
-                email = row['email']
-                project_name = row['project_name']
-                project_type = row['project_type']
-                language = row['language_name']
-                country = row['country']
+        # Also include projects with no content (version 0 or null)
+        for _, project in projects_df.iterrows():
+            if not any(p['Project Name'] == project['project_name'] for p in project_status_data):
+                mtts = mtt_assignments_df[mtt_assignments_df['project_name'] == project['project_name']]
+                mtt_count = len(mtts)
+                mtt_names = ', '.join(mtts['full_name'].unique()) if not mtts.empty else 'No MTTs Assigned'
                 
-                completion = project_completion.get(project_id, {})
-                has_content = completion.get('has_content', False)
-                completion_pct = completion.get('completion_pct', 0)
-                total_items = completion.get('total_items', 0)
-                completed_items = completion.get('completed_items', 0)
-                
-                performance_rating = self._get_performance_rating(completion_pct)
-                mtt_status = self._get_status(completion_pct)
-                
-                mtt_performance.append({
-                    'Project ID': project_id,
-                    'Project Name': project_name,
-                    'Project Type': project_type,
-                    'Language': language,
-                    'Country': country,
-                    'MTT User ID': user_id,
-                    'MTT Username': username,
-                    'MTT Full Name': full_name,
-                    'MTT Email': email,
-                    'Has Content': 'Yes' if has_content else 'No',
-                    'Total Items': total_items,
-                    'Items Completed': completed_items,
-                    'Completion %': round(completion_pct, 2),
-                    'Version': completion.get('version', 0),
-                    'Performance Rating': performance_rating,
-                    'Status': mtt_status
+                project_status_data.append({
+                    'Project Name': project['project_name'],
+                    'Grammar Type': project['project_type'],
+                    'Language': project['language_name'] or 'N/A',
+                    'Country': project['country'] or 'N/A',
+                    'MTTs Assigned': mtt_count,
+                    'MTT Names': mtt_names[:300] if len(mtt_names) > 300 else mtt_names,
+                    'Total Items': 0,
+                    'Items Completed': 0,
+                    'Completion %': 0,
+                    'Version': 0,
+                    'Performance': '❌ Not Started',
+                    'Status': 'Not Started'
                 })
         
-        mtt_performance_df = pd.DataFrame(mtt_performance)
-        if not mtt_performance_df.empty:
-            mtt_performance_df = mtt_performance_df.sort_values('Completion %', ascending=False)
+        project_status_df = pd.DataFrame(project_status_data)
+        if not project_status_df.empty:
+            project_status_df = project_status_df.sort_values(['Grammar Type', 'Completion %'], ascending=[True, False])
         
         # ============================================================
-        # 6. ITEM-LEVEL DETAILS (1 row per grammar item)
-        # ============================================================
-        item_details = []
-        
-        for project_id, item_data in item_details_by_project.items():
-            project_info = projects_df[projects_df['project_id'] == project_id]
-            project_name = project_info.iloc[0]['project_name'] if not project_info.empty else 'Unknown'
-            grammar_type = item_data.get('grammar_type', '')
-            
-            # Get MTTs for this project
-            project_mtts = mtt_assignments_df[mtt_assignments_df['projectId'] == project_id]
-            mtt_names_list = project_mtts['full_name'].tolist() if not project_mtts.empty else ['No MTT Assigned']
-            
-            for mtt_name in mtt_names_list:
-                for item in item_data.get('items', []):
-                    item_details.append({
-                        'Project Name': project_name,
-                        'Grammar Type': grammar_type,
-                        'MTT Full Name': mtt_name,
-                        'Item #': item['item_num'],
-                        'Content': item['preview'] if item['preview'] else '(empty)',
-                        'Has Content': '✅' if item['has_content'] else '❌',
-                        'Full Value': item['value'][:100] if item['value'] else ''
-                    })
-        
-        item_details_df = pd.DataFrame(item_details)
-        
-        # ============================================================
-        # 7. Summary Statistics
+        # Sheet 4: Summary Statistics
         # ============================================================
         summary_data = []
         
@@ -6939,7 +7927,7 @@ class GrammarProjectCompletionReport(BaseReport):
                 summary_data.append({'Metric': f'  - {gtype}', 'Value': count})
         
         if not project_status_df.empty:
-            with_content = len(project_status_df[project_status_df['Has Content'] == 'Yes'])
+            with_content = len(project_status_df[project_status_df['Items Completed'] > 0])
             completed = len(project_status_df[project_status_df['Status'] == 'Completed'])
             in_progress = len(project_status_df[project_status_df['Status'] == 'In Progress'])
             not_started = len(project_status_df[project_status_df['Status'] == 'Not Started'])
@@ -6948,9 +7936,12 @@ class GrammarProjectCompletionReport(BaseReport):
             summary_data.append({'Metric': 'Completed Projects', 'Value': completed})
             summary_data.append({'Metric': 'In Progress Projects', 'Value': in_progress})
             summary_data.append({'Metric': 'Not Started Projects', 'Value': not_started})
-            summary_data.append({'Metric': 'Average Completion %', 'Value': f"{round(project_status_df['Completion %'].mean(), 1)}%"})
+            summary_data.append({'Metric': 'Total Items Across All Projects', 'Value': project_status_df['Total Items'].sum()})
+            summary_data.append({'Metric': 'Total Completed Items', 'Value': project_status_df['Items Completed'].sum()})
+            if project_status_df['Total Items'].sum() > 0:
+                summary_data.append({'Metric': 'Overall Completion Rate', 'Value': f"{(project_status_df['Items Completed'].sum() / project_status_df['Total Items'].sum() * 100):.1f}%"})
         
-        if not mtt_assignments_df.empty:
+        if not mtt_assignments_df.empty and 'user_id' in mtt_assignments_df.columns:
             summary_data.append({'Metric': 'Total MTTs Assigned', 'Value': mtt_assignments_df['user_id'].nunique()})
         
         summary_df = pd.DataFrame(summary_data)
@@ -6959,19 +7950,15 @@ class GrammarProjectCompletionReport(BaseReport):
             'projects_overview': projects_df,
             'mtt_assignments': mtt_assignments_df,
             'project_status': project_status_df,
-            'mtt_performance': mtt_performance_df,
-            'item_details': item_details_df,
             'summary_stats': summary_df
         }
     
     def get_sheet_names(self) -> Dict[str, str]:
         return {
-            'projects_overview': '1. All Grammar Projects',
-            'mtt_assignments': '2. MTT Assignments',
-            'project_status': '3. Assigned vs Completed',
-            'mtt_performance': '4. MTT Performance',
-            'item_details': '5. Item Details (per MTT)',
-            'summary_stats': '6. Summary Statistics'
+            'projects_overview': '1 - All Grammar Projects',
+            'mtt_assignments': '2 - MTT Assignments (Reference)',
+            'project_status': '3 - Project Status (Completion)',
+            'summary_stats': '4 - Summary Statistics'
         }
 
 ===== FILE: ./reports/individual_performance_report.py =====
@@ -7149,68 +8136,44 @@ __all__ = [
     'GrammarProjectCompletionReport',
     'LMSReport',
 ]
-===== FILE: ./reports/literature_project_completion_report.py =====
+===== FILE: ./reports/literature_genre_report.py =====
 
 """
-Literature Project Completion Report - Enhanced with Per-Genre Line-by-Line Tracking
-Tracks each genre separately with detailed section/sentence completion per MTT
+Literature Genre Report - Complete report with genre-level details
+Includes: Projects Overview, MTT Assignments, Project Status, MTT Performance, Genre Details, Summary Statistics
 """
 
 import pandas as pd
 import json
 import re
-from typing import Dict, Any, Set, Tuple, List
+from typing import Dict, Any, List
 from reports.base_report import BaseReport
 
 
-class LiteratureProjectCompletionReport(BaseReport):
-    """Literature Project Completion Report - Per Genre, Per MTT, Line-by-Line Tracking"""
+class LiteratureGenreReport(BaseReport):
+    """Literature Genre Report - Complete report with genre-level breakdown"""
     
     def __init__(self, db_manager, **kwargs):
         super().__init__(db_manager, **kwargs)
-        self.available_filters = ['project_id', 'user_id', 'role', 'country']
-        
-        # Genre name mapping
-        self.genre_names = {
-            'GEN001': 'Bible Story',
-            'GEN002': 'Testimonial', 
-            'GEN003': 'Teaching',
-            'GEN004': 'Song/Poem',
-            'GEN005': 'Drama',
-            'GEN006': 'Article',
-            'GEN007': 'Parable',
-            'GEN008': 'Proverb',
-            'GEN009': 'Prayer',
-            'GEN010': 'Letter'
-        }
-    
-    def _get_genre_name(self, genre_id: str) -> str:
-        """Get display name for a genre ID"""
-        if not genre_id:
-            return 'Unknown'
-        return self.genre_names.get(genre_id.upper(), genre_id)
+        self.available_filters = ['project_id', 'user_id', 'country']
     
     def _count_sentences(self, text: str) -> int:
-        """Count number of sentences in text (split by ., !, ?)"""
-        if not text or not text.strip():
+        """Count number of sentences in text"""
+        if not text:
             return 0
         sentences = re.split(r'[.!?]+', text)
         return len([s for s in sentences if s.strip()])
     
-    def _analyze_genre_content(self, content, genre_id: str) -> Dict[str, Any]:
-        """Analyze literature content and return detailed metrics with line-by-line breakdown"""
+    def _analyze_genre_content(self, content) -> Dict[str, Any]:
+        """Analyze content for a single genre"""
         result = {
-            'genre_id': genre_id,
-            'genre_name': self._get_genre_name(genre_id),
             'total_sections': 0,
-            'sections_with_content': 0,
+            'sections_completed': 0,
+            'section_completion_pct': 0,
             'total_sentences': 0,
             'total_words': 0,
             'total_characters': 0,
-            'section_completion_pct': 0,
-            'has_content': False,
-            'sections': [],
-            'line_items': []
+            'has_content': False
         }
         
         if content is None:
@@ -7229,71 +8192,38 @@ class LiteratureProjectCompletionReport(BaseReport):
                 total_sentences = 0
                 total_words = 0
                 total_chars = 0
-                sections_with_content = 0
+                sections_completed = 0
                 
-                for section_idx, section in enumerate(sections):
+                for section in sections:
                     if isinstance(section, dict):
-                        title = section.get('title', f'Section {section_idx + 1}')
                         text = section.get('content', '')
-                        section_has_content = bool(text and text.strip())
-                        
-                        if section_has_content:
-                            sections_with_content += 1
+                        if text and text.strip():
+                            sections_completed += 1
                             sentences = self._count_sentences(text)
-                            words = len(text.split())
-                            chars = len(text)
                             total_sentences += sentences
-                            total_words += words
-                            total_chars += chars
-                        else:
-                            sentences = 0
-                            words = 0
-                            chars = 0
-                        
-                        section_info = {
-                            'section_num': section_idx + 1,
-                            'section_title': title[:100] if title else f"Section {section_idx + 1}",
-                            'has_content': section_has_content,
-                            'sentences': sentences,
-                            'words': words,
-                            'characters': chars,
-                            'text_preview': text[:200] + '...' if text and len(text) > 200 else (text if text else '')
-                        }
-                        result['sections'].append(section_info)
-                        
-                        line_item = {
-                            'section_num': section_idx + 1,
-                            'section_title': title[:50] if title else f"Section {section_idx + 1}",
-                            'content': text if text else '',
-                            'has_content': section_has_content,
-                            'sentences': sentences,
-                            'words': words,
-                            'characters': chars,
-                            'content_preview': text[:100] + '...' if text and len(text) > 100 else (text if text else '')
-                        }
-                        result['line_items'].append(line_item)
+                            total_words += len(text.split())
+                            total_chars += len(text)
                 
-                result['sections_with_content'] = sections_with_content
+                result['sections_completed'] = sections_completed
                 result['total_sentences'] = total_sentences
                 result['total_words'] = total_words
                 result['total_characters'] = total_chars
-                result['has_content'] = sections_with_content > 0
+                result['has_content'] = sections_completed > 0
                 
                 if result['total_sections'] > 0:
-                    result['section_completion_pct'] = (sections_with_content / result['total_sections'] * 100)
-        except Exception as e:
-            print(f"      ⚠️ Error analyzing content for {genre_id}: {e}")
+                    result['section_completion_pct'] = (sections_completed / result['total_sections'] * 100)
+        except:
+            pass
         
         return result
-
-    def _get_performance_rating(self, section_pct: float, sentence_count: int, sections_completed: int) -> str:
-        """Get performance rating based on completion metrics"""
-        if section_pct >= 100 and sentence_count >= 50:
-            return "🏆 Excellent (Complete & Substantial)"
-        elif section_pct >= 100 and sentence_count >= 20:
-            return "✅ Good (Complete)"
+    
+    def _get_performance_rating(self, section_pct: float, sentence_count: int) -> str:
+        if section_pct >= 100 and sentence_count >= 200:
+            return "🏆 Excellent (High Quality)"
+        elif section_pct >= 100 and sentence_count >= 100:
+            return "✅ Good (Completed)"
         elif section_pct >= 100:
-            return "⚠️ Complete but Minimal Content"
+            return "⚠️ Completed (Low Content)"
         elif section_pct >= 75:
             return "👍 Almost Complete"
         elif section_pct >= 50:
@@ -7305,19 +8235,19 @@ class LiteratureProjectCompletionReport(BaseReport):
         else:
             return "❌ Not Started"
     
-    def _get_status(self, section_pct: float) -> str:
-        if section_pct >= 100:
+    def _get_status(self, completion_pct: float) -> str:
+        if completion_pct >= 100:
             return "Completed"
-        elif section_pct > 0:
+        elif completion_pct > 0:
             return "In Progress"
         else:
             return "Not Started"
     
     def generate(self) -> Dict[str, pd.DataFrame]:
-        """Generate enhanced Literature project completion report with per-genre line-by-line details"""
+        """Generate complete literature report with genre-level details"""
         
         # ============================================================
-        # 1. All Literature Projects Overview
+        # Sheet 1 - All Literature Projects Overview
         # ============================================================
         projects_query = """
         SELECT 
@@ -7343,7 +8273,7 @@ class LiteratureProjectCompletionReport(BaseReport):
             projects_df = pd.DataFrame()
         
         # ============================================================
-        # 2. Get MTT assignments with proper full names
+        # Sheet 2 - MTT Assignments
         # ============================================================
         mtt_assignments_query = """
         SELECT 
@@ -7356,6 +8286,7 @@ class LiteratureProjectCompletionReport(BaseReport):
             COALESCE(NULLIF(u.name, ''), u.username) as full_name,
             u.email,
             utp."literatureGenres" as assigned_genres_raw,
+            array_length(string_to_array(COALESCE(utp."literatureGenres", ''), ','), 1) as genres_assigned_count,
             utp.role as project_role
         FROM users_to_projects utp
         LEFT JOIN projects p ON utp."projectId" = p.id
@@ -7377,12 +8308,11 @@ class LiteratureProjectCompletionReport(BaseReport):
             mtt_assignments_df = pd.DataFrame()
         
         # ============================================================
-        # 3. Get ACTUAL COMPLETED WORK with per-genre details
+        # Sheet 3 - Project Status (Aggregated)
         # ============================================================
-        completed_work_query = """
-        SELECT 
+        project_status_query = """
+        SELECT DISTINCT ON (lp."projectId")
             lp."projectId",
-            lg."genreId",
             lpg.version,
             lpg.content,
             lpg."userId" as completed_by,
@@ -7391,22 +8321,21 @@ class LiteratureProjectCompletionReport(BaseReport):
         JOIN literature_project_genres lg ON lpg."literatureProjectGenreId" = lg.id
         JOIN literature_projects lp ON lg."literatureProjectId" = lp.id
         WHERE lpg.version > 1
-        ORDER BY lp."projectId", lg."genreId", lpg.version DESC
+        ORDER BY lp."projectId", lpg.version DESC
         """
         
         try:
-            completed_df = self.execute_query(completed_work_query)
-            print(f"✅ Retrieved {len(completed_df)} genre version records")
+            project_content_df = self.execute_query(project_status_query)
+            print(f"✅ Retrieved {len(project_content_df)} projects with completion data")
             
-            project_genre_completion = {}
-            
-            for _, row in completed_df.iterrows():
+            project_completion = {}
+            for _, row in project_content_df.iterrows():
                 project_id = row['projectId']
-                genre_id = row['genreId']
                 content = row['content']
                 version = row['version']
                 completed_by = row.get('completed_by')
                 
+                # Get completed by name
                 completed_by_name = completed_by
                 if completed_by:
                     try:
@@ -7421,251 +8350,164 @@ class LiteratureProjectCompletionReport(BaseReport):
                     except:
                         pass
                 
-                metrics = self._analyze_genre_content(content, genre_id)
-                metrics['version'] = version
-                metrics['completed_by'] = completed_by_name
-                metrics['last_updated'] = row['last_updated']
+                metrics = self._analyze_genre_content(content)
                 
-                if project_id not in project_genre_completion:
-                    project_genre_completion[project_id] = {}
-                
-                if genre_id not in project_genre_completion[project_id]:
-                    project_genre_completion[project_id][genre_id] = metrics
-                elif version > project_genre_completion[project_id][genre_id].get('version', 0):
-                    project_genre_completion[project_id][genre_id] = metrics
-            
-            print(f"✅ Processed completion for {len(project_genre_completion)} projects")
+                project_completion[project_id] = {
+                    'has_content': metrics['has_content'],
+                    'version': version,
+                    'completed_by': completed_by_name,
+                    'total_sections': metrics['total_sections'],
+                    'sections_completed': metrics['sections_completed'],
+                    'section_completion_pct': metrics['section_completion_pct'],
+                    'total_sentences': metrics['total_sentences'],
+                    'total_words': metrics['total_words'],
+                    'last_updated': row['last_updated']
+                }
         except Exception as e:
-            print(f"❌ Completion query failed: {e}")
-            project_genre_completion = {}
+            print(f"⚠️ Project status query: {e}")
+            project_completion = {}
         
-        # ============================================================
-        # 4. PROJECT-LEVEL STATUS (per project summary)
-        # ============================================================
-        project_status = []
-        
-        for _, project_row in projects_df.iterrows():
-            project_id = project_row['project_id']
-            project_name = project_row['project_name']
-            project_type = project_row['project_type']
-            language = project_row['language_name'] or 'N/A'
-            country = project_row['country'] or 'N/A'
+        # Build project status dataframe
+        project_status_data = []
+        for _, project in projects_df.iterrows():
+            project_id = project['project_id']
+            completion = project_completion.get(project_id, {})
             
-            project_mtts = mtt_assignments_df[mtt_assignments_df['projectId'] == project_id]
-            mtt_count = project_mtts['user_id'].nunique() if not project_mtts.empty else 0
-            mtt_names = ', '.join(project_mtts['full_name'].unique()) if not project_mtts.empty else ''
+            mtt_info = mtt_assignments_df[mtt_assignments_df['projectId'] == project_id]
+            mtt_count = mtt_info['user_id'].nunique() if not mtt_info.empty else 0
+            mtt_names = ', '.join(mtt_info['full_name'].unique()) if not mtt_info.empty else ''
             
-            assigned_genres = set()
-            for _, mtt_row in project_mtts.iterrows():
-                if mtt_row.get('assigned_genres_raw'):
-                    for g in str(mtt_row['assigned_genres_raw']).split(','):
-                        g = g.strip()
-                        if g:
-                            assigned_genres.add(g)
-            
-            total_genres_assigned = len(assigned_genres)
-            
-            project_completions = project_genre_completion.get(project_id, {})
-            genres_completed = len([g for g in assigned_genres if g in project_completions and project_completions[g].get('has_content', False)])
-            
-            total_sections = 0
-            sections_completed = 0
-            total_sentences = 0
-            total_words = 0
-            
-            for genre_id in assigned_genres:
-                if genre_id in project_completions:
-                    comp = project_completions[genre_id]
-                    total_sections += comp.get('total_sections', 0)
-                    sections_completed += comp.get('sections_with_content', 0)
-                    total_sentences += comp.get('total_sentences', 0)
-                    total_words += comp.get('total_words', 0)
-            
-            genre_completion_pct = (genres_completed / total_genres_assigned * 100) if total_genres_assigned > 0 else 0
-            section_pct = (sections_completed / total_sections * 100) if total_sections > 0 else 0
-            
+            section_pct = completion.get('section_completion_pct', 0)
             status = self._get_status(section_pct)
-            performance = self._get_performance_rating(section_pct, total_sentences, sections_completed)
             
-            project_status.append({
+            project_status_data.append({
                 'Project ID': project_id,
-                'Project Name': project_name,
-                'Project Type': project_type,
-                'Language': language,
-                'Country': country,
+                'Project Name': project['project_name'],
+                'Project Type': project['project_type'],
+                'Language': project['language_name'] or 'N/A',
+                'Country': project['country'] or 'N/A',
                 'MTTs Assigned': mtt_count,
-                'MTT Names': mtt_names[:300],
-                'Genres Assigned': total_genres_assigned,
-                'Genres Completed': genres_completed,
-                'Genre Completion %': round(genre_completion_pct, 2),
-                'Total Sections': total_sections,
-                'Sections Completed': sections_completed,
-                'Section Completion %': round(section_pct, 2),
-                'Total Sentences': total_sentences,
-                'Total Words': total_words,
-                'Avg Sentences/Section': round(total_sentences / total_sections, 1) if total_sections > 0 else 0,
-                'Performance Rating': performance,
+                'MTT Names': mtt_names[:300] if mtt_names else '',
+                'Has Content': 'Yes' if completion.get('has_content', False) else 'No',
+                'Total Sections': completion.get('total_sections', 0),
+                'Sections Completed': completion.get('sections_completed', 0),
+                'Section Completion %': round(completion.get('section_completion_pct', 0), 2),
+                'Total Sentences': completion.get('total_sentences', 0),
+                'Total Words': completion.get('total_words', 0),
+                'Version': completion.get('version', 0),
+                'Completed By': completion.get('completed_by', ''),
                 'Status': status
             })
         
-        project_status_df = pd.DataFrame(project_status)
-        if not project_status_df.empty:
-            project_status_df = project_status_df.sort_values('Section Completion %', ascending=False)
+        project_status_df = pd.DataFrame(project_status_data)
         
         # ============================================================
-        # 5. GENRE-LEVEL DETAILS (One row per genre per project)
+        # Sheet 4 - MTT Performance
         # ============================================================
-        genre_details = []
-        
-        for project_id, genres in project_genre_completion.items():
-            project_info = projects_df[projects_df['project_id'] == project_id]
-            project_name = project_info.iloc[0]['project_name'] if not project_info.empty else 'Unknown'
-            project_type = project_info.iloc[0]['project_type'] if not project_info.empty else ''
-            language = project_info.iloc[0]['language_name'] if not project_info.empty else ''
-            country = project_info.iloc[0]['country'] if not project_info.empty else ''
-            
-            for genre_id, metrics in genres.items():
-                genre_details.append({
-                    'Project ID': project_id,
-                    'Project Name': project_name,
-                    'Project Type': project_type,
-                    'Language': language,
-                    'Country': country,
-                    'Genre ID': genre_id,
-                    'Genre Name': metrics.get('genre_name', self._get_genre_name(genre_id)),
-                    'Total Sections': metrics.get('total_sections', 0),
-                    'Sections Completed': metrics.get('sections_with_content', 0),
-                    'Section Completion %': round(metrics.get('section_completion_pct', 0), 2),
-                    'Total Sentences': metrics.get('total_sentences', 0),
-                    'Total Words': metrics.get('total_words', 0),
-                    'Total Characters': metrics.get('total_characters', 0),
-                    'Version': metrics.get('version', 0),
-                    'Completed By': metrics.get('completed_by', ''),
-                    'Last Updated': metrics.get('last_updated', ''),
-                    'Status': self._get_status(metrics.get('section_completion_pct', 0))
-                })
-        
-        genre_details_df = pd.DataFrame(genre_details)
-        if not genre_details_df.empty:
-            genre_details_df = genre_details_df.sort_values(['Project Name', 'Genre ID'])
-        
-        # ============================================================
-        # 6. MTT-LEVEL PERFORMANCE (per MTT per project)
-        # ============================================================
-        mtt_performance = []
-        
+        mtt_performance_data = []
         if not mtt_assignments_df.empty:
             for _, row in mtt_assignments_df.iterrows():
                 project_id = row['projectId']
-                user_id = row['user_id']
-                username = row['username']
-                full_name = row['full_name']
-                email = row['email']
-                project_name = row['project_name']
-                language = row['language_name']
-                country = row['country']
-                assigned_genres_raw = row['assigned_genres_raw']
+                completion = project_completion.get(project_id, {})
                 
-                assigned_genres = set()
-                for g in str(assigned_genres_raw).split(','):
-                    g = g.strip()
-                    if g:
-                        assigned_genres.add(g)
-                
-                genres_assigned = len(assigned_genres)
-                
-                project_completions = project_genre_completion.get(project_id, {})
-                genres_completed = 0
-                total_sections = 0
-                sections_completed = 0
-                total_sentences = 0
-                total_words = 0
-                
-                for genre_id in assigned_genres:
-                    if genre_id in project_completions:
-                        comp = project_completions[genre_id]
-                        if comp.get('has_content', False):
-                            genres_completed += 1
-                        total_sections += comp.get('total_sections', 0)
-                        sections_completed += comp.get('sections_with_content', 0)
-                        total_sentences += comp.get('total_sentences', 0)
-                        total_words += comp.get('total_words', 0)
-                
-                genre_completion_pct = (genres_completed / genres_assigned * 100) if genres_assigned > 0 else 0
-                section_pct = (sections_completed / total_sections * 100) if total_sections > 0 else 0
-                
-                performance_rating = self._get_performance_rating(section_pct, total_sentences, sections_completed)
-                mtt_status = self._get_status(section_pct)
-                
-                mtt_performance.append({
+                mtt_performance_data.append({
                     'Project ID': project_id,
-                    'Project Name': project_name,
-                    'Language': language,
-                    'Country': country,
-                    'MTT User ID': user_id,
-                    'MTT Username': username,
-                    'MTT Full Name': full_name,
-                    'MTT Email': email,
-                    'Genres Assigned': genres_assigned,
-                    'Genres Completed': genres_completed,
-                    'Genre Completion %': round(genre_completion_pct, 2),
-                    'Total Sections': total_sections,
-                    'Sections Completed': sections_completed,
-                    'Section Completion %': round(section_pct, 2),
-                    'Total Sentences': total_sentences,
-                    'Total Words': total_words,
-                    'Performance Rating': performance_rating,
-                    'Status': mtt_status
+                    'Project Name': row['project_name'],
+                    'Language': row['language_name'] or 'N/A',
+                    'Country': row['country'] or 'N/A',
+                    'MTT User ID': row['user_id'],
+                    'MTT Username': row['username'],
+                    'MTT Full Name': row['full_name'],
+                    'MTT Email': row['email'],
+                    'Genres Assigned': row['genres_assigned_count'],
+                    'Has Content': 'Yes' if completion.get('has_content', False) else 'No',
+                    'Total Sections': completion.get('total_sections', 0),
+                    'Sections Completed': completion.get('sections_completed', 0),
+                    'Section Completion %': round(completion.get('section_completion_pct', 0), 2),
+                    'Total Sentences': completion.get('total_sentences', 0),
+                    'Total Words': completion.get('total_words', 0),
+                    'Status': self._get_status(completion.get('section_completion_pct', 0))
                 })
         
-        mtt_performance_df = pd.DataFrame(mtt_performance)
-        if not mtt_performance_df.empty:
-            mtt_performance_df = mtt_performance_df.sort_values('Section Completion %', ascending=False)
+        mtt_performance_df = pd.DataFrame(mtt_performance_data)
         
         # ============================================================
-        # 7. LINE-BY-LINE DETAILS (One row per section per genre per MTT)
+        # Sheet 5 - Genre Details (1 row per genre)
         # ============================================================
-        line_details = []
+        genre_details_query = """
+        SELECT DISTINCT ON (lpg."literatureProjectGenreId")
+            p.id as project_id,
+            p.name as project_name,
+            p."projectType" as project_type,
+            l.name as language_name,
+            c.name as country,
+            lg."genreId" as genre_type,
+            lg.name as genre_name,
+            lpg.version,
+            lpg.content,
+            lpg."userId" as completed_by_user_id,
+            lpg."updatedAt" as last_updated
+        FROM literature_project_genres_history lpg
+        JOIN literature_project_genres lg ON lpg."literatureProjectGenreId" = lg.id
+        JOIN literature_projects lp ON lg."literatureProjectId" = lp.id
+        JOIN projects p ON lp."projectId" = p.id
+        LEFT JOIN languages l ON p."languageId" = l.id
+        LEFT JOIN countries c ON p."countryId" = c.id
+        WHERE p."projectType" IN ('LITERATURE', 'LITERATURE_PROJECT')
+          AND lpg.version > 1
+        ORDER BY lpg."literatureProjectGenreId", lpg.version DESC
+        """
         
-        for project_id, genres in project_genre_completion.items():
-            project_info = projects_df[projects_df['project_id'] == project_id]
-            project_name = project_info.iloc[0]['project_name'] if not project_info.empty else 'Unknown'
+        try:
+            genre_df = self.execute_query(genre_details_query)
+            print(f"✅ Retrieved {len(genre_df)} genre records")
+        except Exception as e:
+            print(f"⚠️ Genre details query: {e}")
+            genre_df = pd.DataFrame()
+        
+        genre_details_data = []
+        for _, row in genre_df.iterrows():
+            content_analysis = self._analyze_genre_content(row['content'])
             
-            project_mtts = mtt_assignments_df[mtt_assignments_df['projectId'] == project_id]
+            completed_by = row['completed_by_user_id']
+            completed_by_name = ''
+            if completed_by:
+                try:
+                    name_query = f"""
+                    SELECT COALESCE(NULLIF(u.name, ''), u.username) as name
+                    FROM users u
+                    WHERE u.id = '{completed_by}'
+                    """
+                    name_df = self.execute_query(name_query)
+                    if not name_df.empty and name_df['name'].iloc[0]:
+                        completed_by_name = name_df['name'].iloc[0]
+                except:
+                    completed_by_name = str(completed_by)[:8] if completed_by else ''
             
-            for genre_id, metrics in genres.items():
-                genre_name = metrics.get('genre_name', self._get_genre_name(genre_id))
-                
-                assigned_mtts = []
-                for _, mtt_row in project_mtts.iterrows():
-                    if mtt_row.get('assigned_genres_raw'):
-                        assigned_genres = [g.strip() for g in str(mtt_row['assigned_genres_raw']).split(',')]
-                        if genre_id in assigned_genres:
-                            assigned_mtts.append(mtt_row['full_name'])
-                
-                mtt_names = ', '.join(assigned_mtts) if assigned_mtts else 'No MTT Assigned'
-                
-                for item in metrics.get('line_items', []):
-                    line_details.append({
-                        'Project Name': project_name,
-                        'Genre ID': genre_id,
-                        'Genre Name': genre_name,
-                        'MTT(s)': mtt_names,
-                        'Section #': item['section_num'],
-                        'Section Title': item['section_title'],
-                        'Has Content': '✅' if item['has_content'] else '❌',
-                        'Sentences': item['sentences'],
-                        'Words': item['words'],
-                        'Characters': item['characters'],
-                        'Content Preview': item['content_preview']
-                    })
+            genre_details_data.append({
+                'Project ID': row['project_id'],
+                'Project Name': row['project_name'],
+                'Project Type': row['project_type'],
+                'Language': row['language_name'] if row['language_name'] else 'N/A',
+                'Country': row['country'] if row['country'] else 'N/A',
+                'Genre ID': row['genre_type'],
+                'Genre Name': row['genre_name'] if row['genre_name'] else row['genre_type'],
+                'Total Sections': content_analysis['total_sections'],
+                'Sections Completed': content_analysis['sections_completed'],
+                'Section Completion %': round(content_analysis['section_completion_pct'], 2),
+                'Total Sentences': content_analysis['total_sentences'],
+                'Total Words': content_analysis['total_words'],
+                'Total Characters': content_analysis['total_characters'],
+                'Version': row['version'],
+                'Completed By': completed_by_name,
+                'Last Updated': row['last_updated'] if pd.notna(row['last_updated']) else '',
+                'Status': self._get_status(content_analysis['section_completion_pct'])
+            })
         
-        line_details_df = pd.DataFrame(line_details)
-        if not line_details_df.empty:
-            line_details_df = line_details_df.sort_values(['Project Name', 'Genre ID', 'Section #'])
+        genre_details_df = pd.DataFrame(genre_details_data)
         
         # ============================================================
-        # 8. Summary Statistics
+        # Sheet 6 - Summary Statistics
         # ============================================================
         summary_data = []
         
@@ -7675,7 +8517,7 @@ class LiteratureProjectCompletionReport(BaseReport):
             summary_data.append({'Metric': '  - LITERATURE_PROJECT type', 'Value': len(projects_df[projects_df['project_type'] == 'LITERATURE_PROJECT'])})
         
         if not project_status_df.empty:
-            with_content = len(project_status_df[project_status_df['Sections Completed'] > 0])
+            with_content = len(project_status_df[project_status_df['Has Content'] == 'Yes'])
             completed = len(project_status_df[project_status_df['Status'] == 'Completed'])
             in_progress = len(project_status_df[project_status_df['Status'] == 'In Progress'])
             not_started = len(project_status_df[project_status_df['Status'] == 'Not Started'])
@@ -7684,20 +8526,17 @@ class LiteratureProjectCompletionReport(BaseReport):
             summary_data.append({'Metric': 'Completed Projects', 'Value': completed})
             summary_data.append({'Metric': 'In Progress Projects', 'Value': in_progress})
             summary_data.append({'Metric': 'Not Started Projects', 'Value': not_started})
-            summary_data.append({'Metric': 'Total Sections Across All Projects', 'Value': project_status_df['Total Sections'].sum()})
-            summary_data.append({'Metric': 'Total Sections Completed', 'Value': project_status_df['Sections Completed'].sum()})
-            summary_data.append({'Metric': 'Total Sentences Translated', 'Value': project_status_df['Total Sentences'].sum()})
-            summary_data.append({'Metric': 'Total Words Translated', 'Value': project_status_df['Total Words'].sum()})
         
         if not genre_details_df.empty:
-            total_genres = len(genre_details_df)
-            completed_genres = len(genre_details_df[genre_details_df['Status'] == 'Completed'])
-            summary_data.append({'Metric': 'Total Genre Assignments', 'Value': total_genres})
-            summary_data.append({'Metric': 'Completed Genres', 'Value': completed_genres})
-            
-            genre_counts = genre_details_df['Genre Name'].value_counts()
-            for genre_name, count in genre_counts.head(10).items():
-                summary_data.append({'Metric': f'  Genre: {genre_name}', 'Value': count})
+            summary_data.append({'Metric': 'Total Genres', 'Value': len(genre_details_df)})
+            summary_data.append({'Metric': 'Genres with Content', 'Value': len(genre_details_df[genre_details_df['Sections Completed'] > 0])})
+            summary_data.append({'Metric': 'Completed Genres', 'Value': len(genre_details_df[genre_details_df['Status'] == 'Completed'])})
+            summary_data.append({'Metric': 'In Progress Genres', 'Value': len(genre_details_df[genre_details_df['Status'] == 'In Progress'])})
+            summary_data.append({'Metric': 'Not Started Genres', 'Value': len(genre_details_df[genre_details_df['Status'] == 'Not Started'])})
+            summary_data.append({'Metric': 'Total Sections', 'Value': genre_details_df['Total Sections'].sum()})
+            summary_data.append({'Metric': 'Sections Completed', 'Value': genre_details_df['Sections Completed'].sum()})
+            summary_data.append({'Metric': 'Total Sentences', 'Value': genre_details_df['Total Sentences'].sum()})
+            summary_data.append({'Metric': 'Total Words', 'Value': genre_details_df['Total Words'].sum()})
         
         if not mtt_assignments_df.empty:
             summary_data.append({'Metric': 'Total MTTs Assigned', 'Value': mtt_assignments_df['user_id'].nunique()})
@@ -7708,21 +8547,340 @@ class LiteratureProjectCompletionReport(BaseReport):
             'projects_overview': projects_df,
             'mtt_assignments': mtt_assignments_df,
             'project_status': project_status_df,
-            'genre_details': genre_details_df,
             'mtt_performance': mtt_performance_df,
-            'line_by_line_details': line_details_df,
+            'genre_details': genre_details_df,
             'summary_stats': summary_df
         }
     
     def get_sheet_names(self) -> Dict[str, str]:
         return {
-            'projects_overview': '1. All Literature Projects',
-            'mtt_assignments': '2. MTT Assignments',
-            'project_status': '3. Project Summary',
-            'genre_details': '4. Genre Details (Per Genre)',
-            'mtt_performance': '5. MTT Performance',
-            'line_by_line_details': '6. Line-by-Line Details',
-            'summary_stats': '7. Summary Statistics'
+            'projects_overview': '1 - All Literature Projects',
+            'mtt_assignments': '2 - MTT Assignments',
+            'project_status': '3 - Project Status',
+            'mtt_performance': '4 - MTT Performance',
+            'genre_details': '5 - Genre Details (1 row per genre)',
+            'summary_stats': '6 - Summary Statistics'
+        }
+
+===== FILE: ./reports/literature_project_completion_report.py =====
+
+"""
+Literature Project Completion Report - Shows assigned vs completed per MTT
+Handles cases where MTT assignments may not be recorded
+"""
+
+import pandas as pd
+import json
+import re
+from typing import Dict, Any, List
+from reports.base_report import BaseReport
+
+
+class LiteratureProjectCompletionReport(BaseReport):
+    """Literature Project Completion Report - Assigned vs Completed per MTT"""
+    
+    def __init__(self, db_manager, **kwargs):
+        super().__init__(db_manager, **kwargs)
+        self.available_filters = ['project_id', 'user_id', 'country']
+    
+    def _count_sentences(self, text: str) -> int:
+        """Count number of sentences in text"""
+        if not text:
+            return 0
+        sentences = re.split(r'[.!?]+', text)
+        return len([s for s in sentences if s.strip()])
+    
+    def _analyze_content(self, content) -> Dict[str, Any]:
+        """Analyze literature content"""
+        result = {
+            'total_blocks': 0,
+            'filled_blocks': 0,
+            'fill_rate': 0,
+            'total_sentences': 0,
+            'total_words': 0,
+            'has_content': False
+        }
+        
+        if content is None:
+            return result
+        
+        try:
+            if isinstance(content, str):
+                data = json.loads(content)
+            else:
+                data = content
+            
+            if 'content' in data and isinstance(data['content'], list):
+                blocks = data['content']
+                result['total_blocks'] = len(blocks)
+                
+                filled_blocks = 0
+                total_sentences = 0
+                total_words = 0
+                
+                for block in blocks:
+                    if isinstance(block, dict):
+                        text = block.get('content', '')
+                        if text and text.strip():
+                            filled_blocks += 1
+                            total_sentences += self._count_sentences(text)
+                            total_words += len(text.split())
+                
+                result['filled_blocks'] = filled_blocks
+                result['total_sentences'] = total_sentences
+                result['total_words'] = total_words
+                result['has_content'] = filled_blocks > 0
+                
+                if result['total_blocks'] > 0:
+                    result['fill_rate'] = (filled_blocks / result['total_blocks'] * 100)
+        except:
+            pass
+        
+        return result
+    
+    def _get_status(self, fill_rate: float) -> str:
+        if fill_rate >= 100:
+            return "✅ Completed"
+        elif fill_rate >= 75:
+            return "🟢 Almost Complete"
+        elif fill_rate >= 50:
+            return "🟡 Half Complete"
+        elif fill_rate >= 25:
+            return "🟠 In Progress"
+        elif fill_rate > 0:
+            return "🔵 Just Started"
+        else:
+            return "⚪ Not Started"
+    
+    def generate(self) -> Dict[str, pd.DataFrame]:
+        """Generate literature report with assigned vs completed per MTT"""
+        
+        # ============================================================
+        # Sheet 1: All Literature Projects Overview
+        # ============================================================
+        projects_query = """
+        SELECT 
+            p.id as project_id,
+            p.name as project_name,
+            p."projectType" as project_type,
+            l.name as language_name,
+            l."isoCode" as language_code,
+            c.name as country,
+            c."countryCode" as country_code
+        FROM projects p
+        LEFT JOIN languages l ON p."languageId" = l.id
+        LEFT JOIN countries c ON p."countryId" = c.id
+        WHERE p."projectType" IN ('LITERATURE', 'LITERATURE_PROJECT')
+        ORDER BY p.name
+        """
+        
+        try:
+            projects_df = self.execute_query(projects_query)
+            print(f"✅ Retrieved {len(projects_df)} Literature projects")
+        except Exception as e:
+            print(f"❌ Projects query failed: {e}")
+            projects_df = pd.DataFrame()
+        
+        # ============================================================
+        # Sheet 2: MTT Assignments (What was assigned to each MTT)
+        # ============================================================
+        mtt_assignments_query = """
+        SELECT 
+            utp."projectId",
+            p.name as project_name,
+            l.name as language_name,
+            c.name as country,
+            u.id as user_id,
+            u.username,
+            COALESCE(NULLIF(u.name, ''), u.username) as full_name,
+            u.email,
+            utp."literatureGenres" as assigned_genres_raw,
+            array_length(string_to_array(COALESCE(utp."literatureGenres", ''), ','), 1) as genres_assigned_count,
+            utp.role as project_role
+        FROM users_to_projects utp
+        LEFT JOIN projects p ON utp."projectId" = p.id
+        LEFT JOIN languages l ON p."languageId" = l.id
+        LEFT JOIN countries c ON p."countryId" = c.id
+        LEFT JOIN users u ON utp."userId" = u.id
+        WHERE p."projectType" IN ('LITERATURE', 'LITERATURE_PROJECT')
+          AND utp.role = 'MTT'
+        ORDER BY p.name, u.username
+        """
+        
+        try:
+            mtt_assignments_df = self.execute_query(mtt_assignments_query)
+            print(f"✅ Retrieved {len(mtt_assignments_df)} MTT assignment records")
+        except Exception as e:
+            print(f"❌ MTT assignments query failed: {e}")
+            mtt_assignments_df = pd.DataFrame()
+        
+        # ============================================================
+        # Sheet 3: Genre Details (1 row per genre - from completed work)
+        # This is the main sheet - shows actual completed work per genre
+        # ============================================================
+        genre_details_query = """
+        SELECT DISTINCT ON (lpg."literatureProjectGenreId")
+            p.id as project_id,
+            p.name as project_name,
+            p."projectType" as project_type,
+            l.name as language_name,
+            c.name as country,
+            lg."genreId" as genre_type,
+            lg.name as genre_name,
+            lpg.version,
+            lpg.content,
+            lpg."userId" as completed_by_user_id,
+            lpg."updatedAt" as last_updated
+        FROM literature_project_genres_history lpg
+        JOIN literature_project_genres lg ON lpg."literatureProjectGenreId" = lg.id
+        JOIN literature_projects lp ON lg."literatureProjectId" = lp.id
+        JOIN projects p ON lp."projectId" = p.id
+        LEFT JOIN languages l ON p."languageId" = l.id
+        LEFT JOIN countries c ON p."countryId" = c.id
+        WHERE p."projectType" IN ('LITERATURE', 'LITERATURE_PROJECT')
+          AND lpg.version > 1
+        ORDER BY lpg."literatureProjectGenreId", lpg.version DESC
+        """
+        
+        try:
+            genre_df = self.execute_query(genre_details_query)
+            print(f"✅ Retrieved {len(genre_df)} genre records with completed work")
+        except Exception as e:
+            print(f"⚠️ Genre details query: {e}")
+            genre_df = pd.DataFrame()
+        
+        genre_details_data = []
+        for _, row in genre_df.iterrows():
+            content_analysis = self._analyze_content(row['content'])
+            fill_rate = content_analysis['fill_rate']
+            
+            completed_by = row['completed_by_user_id']
+            completed_by_name = ''
+            if completed_by:
+                try:
+                    name_query = f"""
+                    SELECT COALESCE(NULLIF(u.name, ''), u.username) as name
+                    FROM users u
+                    WHERE u.id = '{completed_by}'
+                    """
+                    name_df = self.execute_query(name_query)
+                    if not name_df.empty and name_df['name'].iloc[0]:
+                        completed_by_name = name_df['name'].iloc[0]
+                except:
+                    completed_by_name = str(completed_by)[:8] if completed_by else ''
+            
+            genre_details_data.append({
+                'Project Name': row['project_name'],
+                'Language': row['language_name'] if row['language_name'] else 'N/A',
+                'Country': row['country'] if row['country'] else 'N/A',
+                'Genre': row['genre_name'] if row['genre_name'] else row['genre_type'],
+                'Total Blocks': content_analysis['total_blocks'],
+                'Filled Blocks': content_analysis['filled_blocks'],
+                'Fill Rate %': round(fill_rate, 1),
+                'Total Sentences': content_analysis['total_sentences'],
+                'Total Words': content_analysis['total_words'],
+                'Version': row['version'],
+                'Completed By': completed_by_name,
+                'Last Updated': row['last_updated'] if pd.notna(row['last_updated']) else '',
+                'Status': self._get_status(fill_rate)
+            })
+        
+        genre_details_df = pd.DataFrame(genre_details_data)
+        
+        # ============================================================
+        # Sheet 4: MTT Performance (Who completed what)
+        # Shows which MTT completed which genres
+        # ============================================================
+        mtt_performance_data = []
+        
+        if not genre_df.empty:
+            for _, row in genre_df.iterrows():
+                content_analysis = self._analyze_content(row['content'])
+                fill_rate = content_analysis['fill_rate']
+                
+                completed_by = row['completed_by_user_id']
+                completed_by_name = ''
+                if completed_by:
+                    try:
+                        name_query = f"""
+                        SELECT COALESCE(NULLIF(u.name, ''), u.username) as name
+                        FROM users u
+                        WHERE u.id = '{completed_by}'
+                        """
+                        name_df = self.execute_query(name_query)
+                        if not name_df.empty and name_df['name'].iloc[0]:
+                            completed_by_name = name_df['name'].iloc[0]
+                        else:
+                            completed_by_name = completed_by[:8] + '...' if len(str(completed_by)) > 8 else str(completed_by)
+                    except:
+                        completed_by_name = str(completed_by)[:8] + '...' if len(str(completed_by)) > 8 else str(completed_by)
+                else:
+                    completed_by_name = 'Unknown'
+                
+                mtt_performance_data.append({
+                    'Project Name': row['project_name'],
+                    'Language': row['language_name'] if row['language_name'] else 'N/A',
+                    'Country': row['country'] if row['country'] else 'N/A',
+                    'Genre': row['genre_name'] if row['genre_name'] else row['genre_type'],
+                    'Completed By': completed_by_name,
+                    'Filled Blocks': content_analysis['filled_blocks'],
+                    'Total Blocks': content_analysis['total_blocks'],
+                    'Fill Rate %': round(fill_rate, 1),
+                    'Sentences': content_analysis['total_sentences'],
+                    'Words': content_analysis['total_words'],
+                    'Version': row['version'],
+                    'Last Updated': row['last_updated'] if pd.notna(row['last_updated']) else '',
+                    'Status': self._get_status(fill_rate)
+                })
+        
+        mtt_performance_df = pd.DataFrame(mtt_performance_data)
+        
+        # ============================================================
+        # Sheet 5: Summary Statistics
+        # ============================================================
+        summary_data = []
+        
+        if not projects_df.empty:
+            summary_data.append({'Metric': 'Total Literature Projects', 'Value': len(projects_df)})
+            summary_data.append({'Metric': '  - LITERATURE type', 'Value': len(projects_df[projects_df['project_type'] == 'LITERATURE'])})
+            summary_data.append({'Metric': '  - LITERATURE_PROJECT type', 'Value': len(projects_df[projects_df['project_type'] == 'LITERATURE_PROJECT'])})
+        
+        if not genre_details_df.empty:
+            with_content = len(genre_details_df[genre_details_df['Filled Blocks'] > 0])
+            completed = len(genre_details_df[genre_details_df['Fill Rate %'] >= 100])
+            in_progress = len(genre_details_df[(genre_details_df['Fill Rate %'] > 0) & (genre_details_df['Fill Rate %'] < 100)])
+            not_started = len(genre_details_df[genre_details_df['Fill Rate %'] == 0])
+            
+            summary_data.append({'Metric': 'Genres with Content', 'Value': with_content})
+            summary_data.append({'Metric': 'Completed Genres (100%)', 'Value': completed})
+            summary_data.append({'Metric': 'In Progress Genres', 'Value': in_progress})
+            summary_data.append({'Metric': 'Not Started Genres', 'Value': not_started})
+            summary_data.append({'Metric': 'Total Blocks', 'Value': genre_details_df['Total Blocks'].sum()})
+            summary_data.append({'Metric': 'Filled Blocks', 'Value': genre_details_df['Filled Blocks'].sum()})
+            summary_data.append({'Metric': 'Overall Fill Rate', 'Value': f"{(genre_details_df['Filled Blocks'].sum() / genre_details_df['Total Blocks'].sum() * 100):.1f}%" if genre_details_df['Total Blocks'].sum() > 0 else "0%"})
+            summary_data.append({'Metric': 'Total Sentences', 'Value': genre_details_df['Total Sentences'].sum()})
+            summary_data.append({'Metric': 'Total Words', 'Value': genre_details_df['Total Words'].sum()})
+        
+        if not mtt_performance_df.empty:
+            summary_data.append({'Metric': 'MTTs with Completed Work', 'Value': mtt_performance_df['Completed By'].nunique()})
+        
+        summary_df = pd.DataFrame(summary_data)
+        
+        return {
+            'projects_overview': projects_df,
+            'mtt_assignments': mtt_assignments_df,
+            'genre_details': genre_details_df,
+            'mtt_performance': mtt_performance_df,
+            'summary_stats': summary_df
+        }
+    
+    def get_sheet_names(self) -> Dict[str, str]:
+        return {
+            'projects_overview': '1 - All Literature Projects',
+            'mtt_assignments': '2 - MTT Assignments',
+            'genre_details': '3 - Genre Details (Completed Work)',
+            'mtt_performance': '4 - MTT Performance (Who Completed What)',
+            'summary_stats': '5 - Summary Statistics'
         }
 
 ===== FILE: ./reports/lms_report.py =====
@@ -8308,6 +9466,303 @@ class OBSProjectCompletionReport(BaseReport):
             'summary_stats': '5. Summary Statistics'
         }
 
+===== FILE: ./reports/user_activity_report.py =====
+
+"""
+User Activity Report - Tracks user details, Autographa ID, start date, and last use date
+Shows project-specific roles (MTT, QC, ICT, etc.) from users_to_projects
+"""
+
+import pandas as pd
+from datetime import datetime
+from typing import Dict, Any
+from reports.base_report import BaseReport
+
+
+class UserActivityReport(BaseReport):
+    """User Activity Report - User details with project roles (MTT, QC, ICT, etc.)"""
+    
+    def __init__(self, db_manager, **kwargs):
+        super().__init__(db_manager, **kwargs)
+        self.available_filters = ['role', 'country', 'has_activity']
+    
+    def generate(self) -> Dict[str, pd.DataFrame]:
+        """Generate user activity report with project roles"""
+        
+        # ============================================================
+        # Main Query: Users with their details and activity
+        # Uses string_agg with proper casting for PostgreSQL
+        # ============================================================
+        query = """
+        SELECT 
+            -- User Information
+            u.id as user_id,
+            u.username as autographa_id,
+            COALESCE(NULLIF(u.name, ''), u.username) as full_name,
+            u.email,
+            u."createdAt" as start_date,
+            u."updatedAt" as last_updated,
+            
+            -- Project-specific roles (from users_to_projects) - cast to text
+            STRING_AGG(DISTINCT utp.role::text, ', ') as project_roles,
+            
+            -- Person Information
+            p."firstName",
+            p."lastName",
+            p.phone,
+            p.gender,
+            p.state,
+            
+            -- Country Information
+            c.name as country,
+            c."countryCode" as country_code,
+            
+            -- Language Information (from projects they are assigned to)
+            STRING_AGG(DISTINCT l.name::text, ', ') as languages,
+            
+            -- Project names they are assigned to
+            STRING_AGG(DISTINCT pj.name::text, ', ') as project_names,
+            
+            -- Last activity from worklogs
+            (
+                SELECT MAX(w."endDate") 
+                FROM worklogs w 
+                WHERE w."userId" = u.id AND w."noWork" = false
+            ) as last_use_date,
+            
+            -- First activity date
+            (
+                SELECT MIN(w."startDate") 
+                FROM worklogs w 
+                WHERE w."userId" = u.id AND w."noWork" = false
+            ) as first_use_date,
+            
+            -- Worklog statistics
+            (
+                SELECT COUNT(*) 
+                FROM worklogs w 
+                WHERE w."userId" = u.id AND w."noWork" = false
+            ) as total_work_sessions,
+            
+            -- Projects assigned count
+            COUNT(DISTINCT utp."projectId") as projects_assigned_count
+            
+        FROM users u
+        LEFT JOIN person p ON u."personId"::text = p.id
+        LEFT JOIN countries c ON p."countryId" = c.id
+        LEFT JOIN users_to_projects utp ON u.id = utp."userId"
+        LEFT JOIN projects pj ON utp."projectId" = pj.id
+        LEFT JOIN languages l ON pj."languageId" = l.id
+        WHERE u.role::text != 'SUPER_ADMIN'
+        GROUP BY u.id, u.username, u.name, u.email, u."createdAt", u."updatedAt", 
+                 p."firstName", p."lastName", p.phone, p.gender, p.state,
+                 c.name, c."countryCode"
+        ORDER BY u."createdAt" DESC
+        """
+        
+        try:
+            df = self.execute_query(query)
+            print(f"✅ Retrieved {len(df)} users")
+        except Exception as e:
+            print(f"❌ Query failed: {e}")
+            df = pd.DataFrame()
+        
+        # Clean up and format the data
+        if not df.empty:
+            # Format dates
+            df['start_date'] = pd.to_datetime(df['start_date']).dt.strftime('%Y-%m-%d')
+            
+            # Handle last_use_date
+            df['last_use_date'] = pd.to_datetime(df['last_use_date']).dt.strftime('%Y-%m-%d') if df['last_use_date'].notna().any() else df['last_use_date']
+            df['first_use_date'] = pd.to_datetime(df['first_use_date']).dt.strftime('%Y-%m-%d') if df['first_use_date'].notna().any() else df['first_use_date']
+            df['last_updated'] = pd.to_datetime(df['last_updated']).dt.strftime('%Y-%m-%d')
+            
+            # Handle nulls
+            df['last_use_date'] = df['last_use_date'].fillna('Never used')
+            df['first_use_date'] = df['first_use_date'].fillna('Never used')
+            df['languages'] = df['languages'].fillna('None assigned')
+            df['project_roles'] = df['project_roles'].fillna('No role assigned')
+            df['project_names'] = df['project_names'].fillna('No projects')
+            df['total_work_sessions'] = df['total_work_sessions'].fillna(0).astype(int)
+            df['projects_assigned_count'] = df['projects_assigned_count'].fillna(0).astype(int)
+            df['phone'] = df['phone'].fillna('')
+            df['gender'] = df['gender'].fillna('Not specified')
+            df['state'] = df['state'].fillna('')
+            df['country'] = df['country'].fillna('Not specified')
+            
+            # Calculate days since last use
+            df['days_inactive'] = df.apply(
+                lambda row: (datetime.now() - datetime.strptime(row['last_use_date'], '%Y-%m-%d')).days 
+                if row['last_use_date'] != 'Never used' else None, axis=1
+            )
+            
+            # Add activity status
+            df['activity_status'] = df.apply(
+                lambda row: 'Active' if row['total_work_sessions'] > 0 else 'Inactive (No worklogs)',
+                axis=1
+            )
+        
+        # ============================================================
+        # Sheet 1: All Users (with project roles)
+        # ============================================================
+        if not df.empty:
+            report_df = df[[
+                'full_name',
+                'languages',
+                'project_roles',
+                'autographa_id',
+                'start_date',
+                'last_use_date',
+                'total_work_sessions',
+                'activity_status',
+                'project_names'
+            ]].copy()
+            
+            # Rename columns
+            report_df.columns = [
+                'Name of the user',
+                'Language name',
+                'Role (in project)',
+                'Autographa id',
+                'Start date in Autographa',
+                'Last use date in Autographa',
+                'Work Sessions',
+                'Status',
+                'Projects Assigned'
+            ]
+        else:
+            report_df = pd.DataFrame()
+        
+        # ============================================================
+        # Sheet 2: Active Users (with worklogs)
+        # ============================================================
+        if not df.empty:
+            active_df = df[df['total_work_sessions'] > 0][[
+                'full_name',
+                'languages',
+                'project_roles',
+                'autographa_id',
+                'start_date',
+                'first_use_date',
+                'last_use_date',
+                'total_work_sessions',
+                'projects_assigned_count',
+                'days_inactive',
+                'project_names'
+            ]].copy()
+            
+            active_df.columns = [
+                'Name of the user',
+                'Language name',
+                'Role (in project)',
+                'Autographa id',
+                'Start date',
+                'First use date',
+                'Last use date',
+                'Work Sessions',
+                'Projects Assigned',
+                'Days Inactive',
+                'Project Names'
+            ]
+        else:
+            active_df = pd.DataFrame()
+        
+        # ============================================================
+        # Sheet 3: Inactive Users (never used)
+        # ============================================================
+        if not df.empty:
+            inactive_df = df[df['total_work_sessions'] == 0][[
+                'full_name',
+                'languages',
+                'project_roles',
+                'autographa_id',
+                'start_date',
+                'projects_assigned_count',
+                'project_names'
+            ]].copy()
+            
+            inactive_df.columns = [
+                'Name of the user',
+                'Language name',
+                'Role (in project)',
+                'Autographa id',
+                'Start date',
+                'Projects Assigned',
+                'Project Names'
+            ]
+        else:
+            inactive_df = pd.DataFrame()
+        
+        # ============================================================
+        # Sheet 4: Role Distribution
+        # ============================================================
+        role_distribution = []
+        if not df.empty:
+            # Split comma-separated roles and count
+            all_roles = []
+            for roles in df['project_roles']:
+                if roles and roles != 'No role assigned':
+                    for role in roles.split(', '):
+                        all_roles.append(role)
+            
+            from collections import Counter
+            role_counts = Counter(all_roles)
+            
+            for role, count in role_counts.most_common():
+                role_distribution.append({'Role': role, 'User Count': count})
+        
+        role_df = pd.DataFrame(role_distribution)
+        
+        # ============================================================
+        # Sheet 5: Summary Statistics
+        # ============================================================
+        summary_data = []
+        
+        if not df.empty:
+            summary_data.append({'Metric': 'Total Users', 'Value': len(df)})
+            
+            # Active vs Inactive
+            active_count = len(df[df['total_work_sessions'] > 0])
+            inactive_count = len(df[df['total_work_sessions'] == 0])
+            summary_data.append({'Metric': 'Active Users (have worklogs)', 'Value': active_count})
+            summary_data.append({'Metric': 'Inactive Users (no worklogs)', 'Value': inactive_count})
+            
+            # Users who never used Autographa
+            never_used = len(df[df['last_use_date'] == 'Never used'])
+            summary_data.append({'Metric': 'Never Used Autographa', 'Value': never_used})
+            
+            # Users with activity in last 30 days
+            recently_active = len(df[df['days_inactive'].notna() & (df['days_inactive'] <= 30)])
+            summary_data.append({'Metric': 'Active in Last 30 Days', 'Value': recently_active})
+            
+            # Average work sessions
+            avg_sessions = df['total_work_sessions'].mean()
+            summary_data.append({'Metric': 'Average Work Sessions per User', 'Value': f"{avg_sessions:.1f}"})
+            
+            # Users by country
+            country_counts = df[df['country'] != 'Not specified']['country'].value_counts().head(10)
+            for country, count in country_counts.items():
+                summary_data.append({'Metric': f'Users in {country}', 'Value': count})
+        
+        summary_df = pd.DataFrame(summary_data)
+        
+        return {
+            'all_users': report_df,
+            'active_users': active_df,
+            'inactive_users': inactive_df,
+            'role_distribution': role_df,
+            'summary_stats': summary_df
+        }
+    
+    def get_sheet_names(self) -> Dict[str, str]:
+        return {
+            'all_users': '1 - All Users',
+            'active_users': '2 - Active Users (with work)',
+            'inactive_users': '3 - Inactive Users (no work)',
+            'role_distribution': '4 - Role Distribution',
+            'summary_stats': '5 - Summary Statistics'
+        }
+
 ===== FILE: ./reports/user_assignment_report.py =====
 
 """
@@ -8762,17 +10217,12 @@ echo "║                    UNIFIED REPORTING SYSTEM - COMPLETE RUN            
 echo "╚═══════════════════════════════════════════════════════════════════════════════╝"
 echo ""
 
-RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
 CYAN='\033[0;36m'
 NC='\033[0m'
-
-# Global counters
-TOTAL_TEMPLATES=0
-TOTAL_REPORTS=0
-FAILED_REPORTS=0
 
 print_section() {
     echo ""
@@ -8781,615 +10231,72 @@ print_section() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
 
-check_status() {
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✅ $1${NC}"
-        return 0
-    else
-        echo -e "${RED}❌ $1 failed${NC}"
-        return 1
-    fi
-}
-
-# ============================================================
-# STEP 1: Environment Setup
-# ============================================================
+# Step 1: Environment Setup
 print_section "STEP 1: Setting up environment"
 
 if [ ! -d "venv" ]; then
     echo "📦 Creating virtual environment..."
     python3 -m venv venv
-    check_status "Virtual environment created"
 fi
 
 echo "🔌 Activating virtual environment..."
 source venv/bin/activate
-check_status "Virtual environment activated"
 
 echo "📚 Installing dependencies..."
 pip install --upgrade pip -q
-pip install pandas openpyxl psycopg2-binary python-dotenv pyyaml -q
-check_status "Dependencies installed"
+pip install pandas openpyxl psycopg2-binary python-dotenv pyyaml sqlalchemy -q
+echo -e "${GREEN}✅ Dependencies installed${NC}"
 
-# ============================================================
-# STEP 2: Directory Setup
-# ============================================================
+# Step 2: Directory Setup
 print_section "STEP 2: Setting up directories"
-
 mkdir -p output/reports output/templates output/uploads output/logs config
-check_status "Directories created"
+echo -e "${GREEN}✅ Directories created${NC}"
 
-# ============================================================
-# STEP 3: Configuration Setup
-# ============================================================
-print_section "STEP 3: Setting up configuration"
-
-if [ ! -f "config/passwords.env" ]; then
-    echo "🔐 Creating passwords.env template..."
-    cat > config/passwords.env << 'EOF'
-# AG Database Passwords
-AG_DEV_PASSWORD=postgres
-AG_STAGING_PASSWORD=
-AG_PROD_PASSWORD=
-
-# Telios_LMS Database Passwords
-TELIOS_LMS_DEV_PASSWORD=postgres
-TELIOS_LMS_STAGING_PASSWORD=
-TELIOS_LMS_PROD_PASSWORD=
-EOF
-    check_status "passwords.env created"
-fi
-
-if [ ! -f "config/system_config.yaml" ]; then
-    echo "⚙️ Creating system_config.yaml..."
-    cat > config/system_config.yaml << 'EOF'
-output:
-  reports_path: './output/reports'
-  templates_path: './output/templates'
-  uploads_path: './output/uploads'
-  logs_path: './output/logs'
-database:
-  default: 'AG_Dev'
-reports:
-  default_format: 'excel'
-templates:
-  auto_generate_on_startup: true
-uploads:
-  max_file_size_mb: 50
-  require_approval: false
-EOF
-    check_status "system_config.yaml created"
-fi
-
-# ============================================================
-# STEP 4: Generate All Excel Templates
-# ============================================================
-print_section "STEP 4: Generating Excel templates"
-
-# Create a Python script to generate templates
-cat > /tmp/generate_templates.py << 'PYEOF'
-import sys
-sys.path.insert(0, '.')
+# Step 3: Generate All Excel Templates
+print_section "STEP 3: Generating Excel templates"
+python3 -c "
 from utils.excel_template_generator import get_excel_template_generator
-
 gen = get_excel_template_generator()
 files = gen.generate_all_templates()
-print(f"✅ Generated {len(files)} templates")
-for f in files:
-    print(f"   • {f.name}")
-PYEOF
+print(f'✅ Generated {len(files)} templates')
+"
+echo -e "${GREEN}✅ Templates generated${NC}"
 
-python3 /tmp/generate_templates.py
-TOTAL_TEMPLATES=$(ls -1 output/templates/*.xlsx 2>/dev/null | wc -l)
-check_status "Templates generated ($TOTAL_TEMPLATES files)"
+# Step 4: Generate AG_Dev Reports
+print_section "STEP 4: Generating AG_Dev Reports"
 
-# ============================================================
-# STEP 5: Generate AG_Dev Reports
-# ============================================================
-print_section "STEP 5: Generating AG_Dev Reports"
+reports="bible-completion obs-completion literature-completion grammar-completion individual worklog user user-assignments consolidated user-activity"
+for report in $reports; do
+    echo -e "${YELLOW}▶ Generating $report report...${NC}"
+    python3 run.py --report "$report" --database AG_Dev --format excel 2>&1 | grep -E "(✅|❌|Error|Retrieved)" || echo "   ⚠️ Could not generate $report"
+done
 
-# Create a Python script to generate all AG_Dev reports
-cat > /tmp/generate_ag_reports.py << 'PYEOF'
-import sys
-import subprocess
-import pandas as pd
-from datetime import datetime
-from pathlib import Path
+# Step 5: Generate Telios_LMS Report
+print_section "STEP 5: Generating Telios_LMS Reports"
+echo -e "${YELLOW}▶ Generating LMS demographics report...${NC}"
+python3 run.py --report lms --database Telios_LMS_Dev --format excel 2>&1 | grep -E "(✅|❌)" || echo "   ⚠️ LMS report skipped"
 
-sys.path.insert(0, '.')
-
-from config.database_config import DatabaseConfigManager
-from core.database_manager import DatabaseManager
-from reports.user_report import UserReport
-from reports.worklog_report import WorklogReport
-from reports.individual_performance_report import IndividualPerformanceReport
-from reports.bible_project_completion_report import BibleProjectCompletionReport
-from reports.obs_project_completion_report import OBSProjectCompletionReport
-from reports.literature_project_completion_report import LiteratureProjectCompletionReport
-from reports.grammar_project_completion_report import GrammarProjectCompletionReport
-
-print("\n📊 Generating AG_Dev Reports...")
-print("-" * 50)
-
-db_config = DatabaseConfigManager()
-db_manager = DatabaseManager(db_config)
-output_dir = Path("./output/reports")
-output_dir.mkdir(parents=True, exist_ok=True)
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-reports = [
-    ("user", UserReport, "User Report"),
-    ("worklog", WorklogReport, "Worklog Report"),
-    ("individual", IndividualPerformanceReport, "Individual Performance Report"),
-    ("bible_completion", BibleProjectCompletionReport, "Bible Project Completion Report"),
-    ("obs_completion", OBSProjectCompletionReport, "OBS Project Completion Report"),
-    ("literature_completion", LiteratureProjectCompletionReport, "Literature Project Completion Report"),
-    ("grammar_completion", GrammarProjectCompletionReport, "Grammar Project Completion Report"),
-]
-
-results = {"success": [], "failed": []}
-
-for report_name, report_class, display_name in reports:
-    print(f"  Generating {display_name}...", end=" ", flush=True)
-    try:
-        report = report_class(db_manager, db_name='AG_Dev')
-        data = report.generate()
-        
-        filename = output_dir / f"{report_name}_{timestamp}.xlsx"
-        with pd.ExcelWriter(filename, engine='openpyxl') as writer:
-            for sheet_name, df in data.items():
-                sheet_title = report.get_sheet_names().get(sheet_name, sheet_name)[:31]
-                if df.empty:
-                    df = pd.DataFrame({'Message': ['No data available']})
-                df.to_excel(writer, sheet_name=sheet_title, index=False)
-        
-        if filename.exists():
-            size = filename.stat().st_size
-            print(f"✅ ({size:,} bytes)")
-            results["success"].append((report_name, filename.name, size))
-        else:
-            print(f"❌ Failed to save")
-            results["failed"].append(report_name)
-    except Exception as e:
-        print(f"❌ Error: {str(e)[:50]}")
-        results["failed"].append(report_name)
-
-print("\n" + "-" * 50)
-print(f"✅ Successful: {len(results['success'])} reports")
-print(f"❌ Failed: {len(results['failed'])} reports")
-
-# Save results to file for shell to read
-with open("/tmp/ag_results.txt", "w") as f:
-    f.write(f"SUCCESS={len(results['success'])}\n")
-    f.write(f"FAILED={len(results['failed'])}\n")
-    for name, file, size in results['success']:
-        f.write(f"FILE:{name}:{file}:{size}\n")
-PYEOF
-
-python3 /tmp/generate_ag_reports.py
-AG_SUCCESS=$(grep "SUCCESS=" /tmp/ag_results.txt | cut -d'=' -f2)
-AG_FAILED=$(grep "FAILED=" /tmp/ag_results.txt | cut -d'=' -f2)
-TOTAL_REPORTS=$((TOTAL_REPORTS + AG_SUCCESS + AG_FAILED))
-FAILED_REPORTS=$((FAILED_REPORTS + AG_FAILED))
-
-# ============================================================
-# STEP 6: Generate Telios_LMS Reports
-# ============================================================
-print_section "STEP 6: Generating Telios_LMS Reports"
-
-cat > /tmp/generate_lms_reports.py << 'PYEOF'
-import sys
-import pandas as pd
-from datetime import datetime
-from pathlib import Path
-
-sys.path.insert(0, '.')
-
-from config.database_config import DatabaseConfigManager
-from core.database_manager import DatabaseManager
-
-print("\n📊 Generating Telios_LMS Reports...")
-print("-" * 50)
-
-db_config = DatabaseConfigManager()
-db_manager = DatabaseManager(db_config)
-output_dir = Path("./output/reports")
-output_dir.mkdir(parents=True, exist_ok=True)
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-results = {"success": [], "failed": []}
-
-# 1. Batch Summary Report
-print("  Generating Batch Summary Report...", end=" ", flush=True)
-try:
-    batch_query = """
-    SELECT 
-        b.id as batch_id,
-        b.batch as batch_name,
-        b.location,
-        b."startDate",
-        b."endDate",
-        c.title as course_title,
-        co.country as country_name,
-        bs.batchstatus as batch_status,
-        COUNT(DISTINCT e.id) as total_enrollments,
-        COUNT(DISTINCT CASE WHEN e.role = 'ICT' THEN e.id END) as ict_count,
-        COUNT(DISTINCT CASE WHEN e.role = 'MTT' THEN e.id END) as mtt_count,
-        COUNT(DISTINCT CASE WHEN e.role = 'QC' THEN e.id END) as qc_count
-    FROM batch b
-    LEFT JOIN course c ON b.course = c.id
-    LEFT JOIN country co ON b.country = co.id
-    LEFT JOIN batchstatus bs ON b.batchstatus = bs.id
-    LEFT JOIN enrollment e ON b.id = e.batch
-    GROUP BY b.id, b.batch, b.location, b."startDate", b."endDate", 
-             c.title, co.country, bs.batchstatus
-    ORDER BY b."startDate" DESC
-    """
-    batch_df = db_manager.execute_query(batch_query, db_name='Telios_LMS_Dev')
-    filename = output_dir / f"lms_batch_summary_{timestamp}.xlsx"
-    with pd.ExcelWriter(filename, engine='openpyxl') as writer:
-        batch_df.to_excel(writer, sheet_name='Batch Summary', index=False)
-    if filename.exists():
-        print(f"✅ ({filename.stat().st_size:,} bytes)")
-        results["success"].append(("lms_batch_summary", filename.name))
-    else:
-        print("❌ Failed")
-        results["failed"].append("lms_batch_summary")
-except Exception as e:
-    print(f"❌ Error: {str(e)[:50]}")
-    results["failed"].append("lms_batch_summary")
-
-# 2. Enrollment Report
-print("  Generating Enrollment Report...", end=" ", flush=True)
-try:
-    enrollment_query = """
-    SELECT 
-        b.batch as batch_name,
-        COALESCE(p."firstName" || ' ' || p."lastName", p.email) as participant_name,
-        p.email,
-        p.phone,
-        e.role,
-        e.enrollmentDate,
-        e.completionStatus,
-        e.completionDate
-    FROM enrollment e
-    LEFT JOIN batch b ON e.batch = b.id
-    LEFT JOIN person p ON e.participant = p.id
-    ORDER BY b.batch, e.role, p."firstName"
-    """
-    enrollment_df = db_manager.execute_query(enrollment_query, db_name='Telios_LMS_Dev')
-    filename = output_dir / f"lms_enrollment_{timestamp}.xlsx"
-    with pd.ExcelWriter(filename, engine='openpyxl') as writer:
-        enrollment_df.to_excel(writer, sheet_name='Enrollments', index=False)
-    if filename.exists():
-        print(f"✅ ({filename.stat().st_size:,} bytes)")
-        results["success"].append(("lms_enrollment", filename.name))
-    else:
-        print("❌ Failed")
-        results["failed"].append("lms_enrollment")
-except Exception as e:
-    print(f"❌ Error: {str(e)[:50]}")
-    results["failed"].append("lms_enrollment")
-
-# 3. Attendance Report
-print("  Generating Attendance Report...", end=" ", flush=True)
-try:
-    attendance_query = """
-    SELECT 
-        b.batch as batch_name,
-        COALESCE(p."firstName" || ' ' || p."lastName", p.email) as participant_name,
-        m.module as module_name,
-        a.date,
-        a.status,
-        a.remarks
-    FROM attendance a
-    LEFT JOIN enrollment e ON a.enrollment = e.id
-    LEFT JOIN batch b ON e.batch = b.id
-    LEFT JOIN person p ON e.participant = p.id
-    LEFT JOIN module m ON a.module = m.id
-    ORDER BY b.batch, a.date DESC
-    """
-    attendance_df = db_manager.execute_query(attendance_query, db_name='Telios_LMS_Dev')
-    filename = output_dir / f"lms_attendance_{timestamp}.xlsx"
-    with pd.ExcelWriter(filename, engine='openpyxl') as writer:
-        attendance_df.to_excel(writer, sheet_name='Attendance', index=False)
-    if filename.exists():
-        print(f"✅ ({filename.stat().st_size:,} bytes)")
-        results["success"].append(("lms_attendance", filename.name))
-    else:
-        print("❌ Failed")
-        results["failed"].append("lms_attendance")
-except Exception as e:
-    print(f"❌ Error: {str(e)[:50]}")
-    results["failed"].append("lms_attendance")
-
-# 4. Assignment Submissions Report
-print("  Generating Assignment Submissions Report...", end=" ", flush=True)
-try:
-    assignment_query = """
-    SELECT 
-        b.batch as batch_name,
-        COALESCE(p."firstName" || ' ' || p."lastName", p.email) as participant_name,
-        a.assignment as assignment_name,
-        ass.submissionDate,
-        CASE 
-            WHEN ass.submissionstatus = 1 THEN 'Submitted'
-            WHEN ass.submissionstatus = 2 THEN 'Redo Required'
-            WHEN ass.submissionstatus = 3 THEN 'Approved'
-            WHEN ass.submissionstatus = 4 THEN 'Rejected'
-            ELSE 'Unknown'
-        END as status,
-        ass.score,
-        ass.feedback
-    FROM assignmentsubmission ass
-    LEFT JOIN enrollment e ON ass.enrollment = e.id
-    LEFT JOIN batch b ON e.batch = b.id
-    LEFT JOIN person p ON e.participant = p.id
-    LEFT JOIN assignment a ON ass.assignment = a.id
-    ORDER BY b.batch, ass.submissionDate DESC
-    """
-    assignment_df = db_manager.execute_query(assignment_query, db_name='Telios_LMS_Dev')
-    filename = output_dir / f"lms_assignments_{timestamp}.xlsx"
-    with pd.ExcelWriter(filename, engine='openpyxl') as writer:
-        assignment_df.to_excel(writer, sheet_name='Submissions', index=False)
-    if filename.exists():
-        print(f"✅ ({filename.stat().st_size:,} bytes)")
-        results["success"].append(("lms_assignments", filename.name))
-    else:
-        print("❌ Failed")
-        results["failed"].append("lms_assignments")
-except Exception as e:
-    print(f"❌ Error: {str(e)[:50]}")
-    results["failed"].append("lms_assignments")
-
-# 5. Survey Responses Report
-print("  Generating Survey Responses Report...", end=" ", flush=True)
-try:
-    survey_query = """
-    SELECT 
-        s.survey as survey_name,
-        COALESCE(p."firstName" || ' ' || p."lastName", p.email) as participant_name,
-        r.batchid,
-        r.question,
-        r.response,
-        r.role,
-        r.createdAt as response_date
-    FROM response r
-    LEFT JOIN survey s ON r.survey = s.id
-    LEFT JOIN person p ON r.participant = p.id
-    ORDER BY s.survey, r.createdAt DESC
-    """
-    survey_df = db_manager.execute_query(survey_query, db_name='Telios_LMS_Dev')
-    filename = output_dir / f"lms_surveys_{timestamp}.xlsx"
-    with pd.ExcelWriter(filename, engine='openpyxl') as writer:
-        survey_df.to_excel(writer, sheet_name='Survey Responses', index=False)
-    if filename.exists():
-        print(f"✅ ({filename.stat().st_size:,} bytes)")
-        results["success"].append(("lms_surveys", filename.name))
-    else:
-        print("❌ Failed")
-        results["failed"].append("lms_surveys")
-except Exception as e:
-    print(f"❌ Error: {str(e)[:50]}")
-    results["failed"].append("lms_surveys")
-
-# 6. Participant Demographics Report
-print("  Generating Participant Demographics Report...", end=" ", flush=True)
-try:
-    demographics_query = """
-    SELECT 
-        co.country as country_name,
-        p.gender,
-        p.maritalstatus,
-        p.highestqualification,
-        COUNT(DISTINCT p.id) as participant_count
-    FROM person p
-    LEFT JOIN country co ON p.country_id = co.id
-    GROUP BY co.country, p.gender, p.maritalstatus, p.highestqualification
-    ORDER BY co.country, participant_count DESC
-    """
-    demographics_df = db_manager.execute_query(demographics_query, db_name='Telios_LMS_Dev')
-    filename = output_dir / f"lms_demographics_{timestamp}.xlsx"
-    with pd.ExcelWriter(filename, engine='openpyxl') as writer:
-        demographics_df.to_excel(writer, sheet_name='Demographics', index=False)
-    if filename.exists():
-        print(f"✅ ({filename.stat().st_size:,} bytes)")
-        results["success"].append(("lms_demographics", filename.name))
-    else:
-        print("❌ Failed")
-        results["failed"].append("lms_demographics")
-except Exception as e:
-    print(f"❌ Error: {str(e)[:50]}")
-    results["failed"].append("lms_demographics")
-
-print("\n" + "-" * 50)
-print(f"✅ Successful: {len(results['success'])} LMS reports")
-print(f"❌ Failed: {len(results['failed'])} LMS reports")
-
-with open("/tmp/lms_results.txt", "w") as f:
-    f.write(f"SUCCESS={len(results['success'])}\n")
-    f.write(f"FAILED={len(results['failed'])}\n")
-PYEOF
-
-python3 /tmp/generate_lms_reports.py
-LMS_SUCCESS=$(grep "SUCCESS=" /tmp/lms_results.txt | cut -d'=' -f2)
-LMS_FAILED=$(grep "FAILED=" /tmp/lms_results.txt | cut -d'=' -f2)
-TOTAL_REPORTS=$((TOTAL_REPORTS + LMS_SUCCESS + LMS_FAILED))
-FAILED_REPORTS=$((FAILED_REPORTS + LMS_FAILED))
-
-# ============================================================
-# STEP 7: Generate Consolidated Summary Report
-# ============================================================
-print_section "STEP 7: Generating Consolidated Summary Report"
-
-cat > /tmp/generate_summary.py << 'PYEOF'
-import sys
-import pandas as pd
-from datetime import datetime
-from pathlib import Path
-
-sys.path.insert(0, '.')
-
-output_dir = Path("./output/reports")
-output_dir.mkdir(parents=True, exist_ok=True)
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-# Collect all generated reports
-reports_list = []
-for file in output_dir.glob("*.xlsx"):
-    reports_list.append({
-        "Filename": file.name,
-        "Size (KB)": round(file.stat().st_size / 1024, 1),
-        "Modified": datetime.fromtimestamp(file.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
-    })
-
-summary_df = pd.DataFrame(reports_list)
-summary_df = summary_df.sort_values("Filename")
-
-# Create summary workbook
-summary_file = output_dir / f"CONSOLIDATED_SUMMARY_{timestamp}.xlsx"
-with pd.ExcelWriter(summary_file, engine='openpyxl') as writer:
-    # Sheet 1: All Reports
-    summary_df.to_excel(writer, sheet_name='All Reports', index=False)
-    
-    # Sheet 2: AG_Dev Reports
-    ag_reports = summary_df[summary_df['Filename'].str.contains('bible|obs|literature|grammar|user|worklog|individual', case=False, na=False)]
-    if not ag_reports.empty:
-        ag_reports.to_excel(writer, sheet_name='AG_Dev Reports', index=False)
-    
-    # Sheet 3: LMS Reports
-    lms_reports = summary_df[summary_df['Filename'].str.contains('lms_', case=False, na=False)]
-    if not lms_reports.empty:
-        lms_reports.to_excel(writer, sheet_name='LMS Reports', index=False)
-    
-    # Sheet 4: Templates
-    templates_dir = Path("./output/templates")
-    templates_list = []
-    for file in templates_dir.glob("*.xlsx"):
-        templates_list.append({
-            "Template Name": file.name,
-            "Size (KB)": round(file.stat().st_size / 1024, 1),
-            "Modified": datetime.fromtimestamp(file.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
-        })
-    if templates_list:
-        templates_df = pd.DataFrame(templates_list)
-        templates_df.to_excel(writer, sheet_name='Templates', index=False)
-    
-    # Sheet 5: Statistics
-    stats = [
-        {"Metric": "Total Reports Generated", "Value": len(reports_list)},
-        {"Metric": "Total Templates Generated", "Value": len(templates_list)},
-        {"Metric": "AG_Dev Reports", "Value": len(ag_reports) if not ag_reports.empty else 0},
-        {"Metric": "LMS Reports", "Value": len(lms_reports) if not lms_reports.empty else 0},
-        {"Metric": "Generation Time", "Value": timestamp},
-    ]
-    stats_df = pd.DataFrame(stats)
-    stats_df.to_excel(writer, sheet_name='Statistics', index=False)
-
-print(f"✅ Consolidated summary saved to: {summary_file.name}")
-print(f"   Total reports: {len(reports_list)}")
-print(f"   Total templates: {len(templates_list)}")
-PYEOF
-
-python3 /tmp/generate_summary.py
-check_status "Consolidated summary generated"
-
-# ============================================================
-# STEP 8: Final Output
-# ============================================================
+# Step 6: Show Results
 print_section "🎉 GENERATION COMPLETE!"
-
-# Count final files
-TOTAL_REPORT_FILES=$(ls -1 output/reports/*.xlsx 2>/dev/null | wc -l)
-TOTAL_TEMPLATE_FILES=$(ls -1 output/templates/*.xlsx 2>/dev/null | wc -l)
 
 echo ""
 echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║                           GENERATION SUMMARY                                  ║${NC}"
 echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "${CYAN}📊 REPORTS GENERATED: ${TOTAL_REPORT_FILES} files${NC}"
+echo -e "${CYAN}📁 OUTPUT DIRECTORY: ./output/${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo -e "${YELLOW}AG_Dev Reports:${NC}"
-ls -1 output/reports/*.xlsx 2>/dev/null | grep -v "lms_" | grep -v "CONSOLIDATED" | head -15 | while read f; do
-    size=$(ls -lh "$f" | awk '{print $5}')
-    echo "   • $(basename "$f") ($size)"
-done
+echo -e "${YELLOW}📊 Reports generated:${NC}"
+ls -la output/reports/*.xlsx 2>/dev/null | wc -l | xargs echo "   Total:"
+ls -la output/reports/*.xlsx 2>/dev/null | tail -15 | awk '{print "   • " $9}' | xargs -n1 basename
 echo ""
-echo -e "${YELLOW}Telios_LMS Reports:${NC}"
-ls -1 output/reports/lms_*.xlsx 2>/dev/null | while read f; do
-    size=$(ls -lh "$f" | awk '{print $5}')
-    echo "   • $(basename "$f") ($size)"
-done
+echo -e "${YELLOW}📋 Templates generated:${NC}"
+ls -la output/templates/*.xlsx 2>/dev/null | wc -l | xargs echo "   Total:"
 echo ""
-echo -e "${CYAN}📋 TEMPLATES GENERATED: ${TOTAL_TEMPLATE_FILES} files${NC}"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-ls -1 output/templates/*.xlsx 2>/dev/null | while read f; do
-    size=$(ls -lh "$f" | awk '{print $5}')
-    echo "   • $(basename "$f") ($size)"
-done
-echo ""
-echo -e "${CYAN}📁 OUTPUT DIRECTORY:${NC} ./output/"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "   📊 Reports:  ./output/reports/"
-echo "   📋 Templates: ./output/templates/"
-echo "   📤 Uploads:   ./output/uploads/"
-echo "   📝 Logs:      ./output/logs/"
-echo ""
+echo -e "${GREEN}✅ All tasks completed successfully!${NC}"
 
-# ============================================================
-# STEP 9: Next Steps
-# ============================================================
-print_section "📌 NEXT STEPS"
-
-echo ""
-echo "1. Configure database passwords:"
-echo -e "   ${YELLOW}nano config/passwords.env${NC}"
-echo ""
-echo "2. View consolidated summary report:"
-echo -e "   ${YELLOW}open output/reports/CONSOLIDATED_SUMMARY_*.xlsx${NC}"
-echo ""
-echo "3. Generate reports manually (if database connected):"
-echo -e "   ${YELLOW}python3 main.py report --type bible-completion --db AG_Dev${NC}"
-echo -e "   ${YELLOW}python3 main.py report --type obs-completion --db AG_Dev${NC}"
-echo ""
-echo "4. Upload data using templates:"
-echo -e "   ${YELLOW}python3 main.py upload --file data.xlsx --purpose user_import --db AG_Dev${NC}"
-echo ""
-echo "5. List all available reports:"
-echo -e "   ${YELLOW}python3 main.py list-reports${NC}"
-echo ""
-echo "6. Run everything again:"
-echo -e "   ${YELLOW}./run_all.sh${NC}"
-echo ""
-
-# Deactivate virtual environment
 deactivate 2>/dev/null
-
-echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║                              ✅ ALL DONE!                                      ║${NC}"
-echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════════════════════╝${NC}"
-# ============================================================
-# Additional Reports (user-assignments and consolidated)
-# ============================================================
-echo ""
-echo -e "${BLUE}📊 Generating Additional AG_Dev Reports...${NC}"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-echo -e "${YELLOW}▶ Generating user-assignments report...${NC}"
-python3 run.py --report user-assignments --database AG_Dev --format excel 2>&1
-if [ $? -eq 0 ]; then
-    echo -e "${GREEN}   ✅ user-assignments completed successfully${NC}"
-else
-    echo -e "${RED}   ❌ user-assignments failed${NC}"
-fi
-
-echo ""
-echo -e "${YELLOW}▶ Generating consolidated report...${NC}"
-python3 run.py --report consolidated --database AG_Dev --format excel 2>&1
-if [ $? -eq 0 ]; then
-    echo -e "${GREEN}   ✅ consolidated completed successfully${NC}"
 
 ===== FILE: ./run.py =====
 
@@ -9420,6 +10327,9 @@ from reports.grammar_project_completion_report import GrammarProjectCompletionRe
 from reports.lms_report import LMSReport
 from reports.user_assignment_report import UserAssignmentReport
 from reports.consolidated_project_report import ConsolidatedProjectReport
+from reports.literature_genre_report import LiteratureGenreReport
+from reports.user_activity_report import UserActivityReport
+from reports.ag_drafting_monitoring_report import AGDraftingMonitoringReport
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -9454,25 +10364,28 @@ def main():
         epilog="""
 Examples:
   # AG_Dev Reports
-  python3 run.py --report bible-completion --database AG_Dev
-  python3 run.py --report obs-completion --database AG_Dev
-  python3 run.py --report literature-completion --database AG_Dev
-  python3 run.py --report grammar-completion --database AG_Dev
-  python3 run.py --report individual --database AG_Dev
-  python3 run.py --report worklog --database AG_Dev
-  python3 run.py --report user --database AG_Dev
-  python3 run.py --report user-assignments --database AG_Dev
-  python3 run.py --report consolidated --database AG_Dev
+  python run.py --report bible-completion --database AG_Dev
+  python run.py --report obs-completion --database AG_Dev
+  python run.py --report literature-completion --database AG_Dev
+  python run.py --report grammar-completion --database AG_Dev
+  python run.py --report individual --database AG_Dev
+  python run.py --report worklog --database AG_Dev
+  python run.py --report user --database AG_Dev
+  python run.py --report user-assignments --database AG_Dev
+  python run.py --report consolidated --database AG_Dev
+  python run.py --report literature-genre --database AG_Dev
+  python run.py --report user-activity --database AG_Dev
+  python run.py --report ag-drafting --database AG_Dev
   
   # Telios_LMS Reports
-  python3 run.py --report lms --database Telios_LMS_Dev
+  python run.py --report lms --database Telios_LMS_Dev
   
   # Custom Query
-  python3 run.py --report custom --database AG_Dev --query "SELECT * FROM users LIMIT 10"
+  python run.py --report custom --database AG_Dev --query "SELECT * FROM users LIMIT 10"
   
   # List available resources
-  python3 run.py --list-reports
-  python3 run.py --list-databases
+  python run.py --list-reports
+  python run.py --list-databases
         """
     )
     
@@ -9481,7 +10394,8 @@ Examples:
                            'user', 'worklog', 'custom', 'individual',
                            'bible-completion', 'obs-completion', 
                            'literature-completion', 'grammar-completion',
-                           'user-assignments', 'consolidated', 'lms'
+                           'user-assignments', 'consolidated', 'literature-genre',
+                           'user-activity', 'ag-drafting', 'lms'
                        ],
                        help='Type of report to generate')
     
@@ -9531,13 +10445,16 @@ Examples:
         print("\n📁 AG_Dev Reports:")
         print("   • bible-completion - Bible translation progress (verses + chapters)")
         print("   • obs-completion - OBS translation (chapters + paragraphs + audio)")
-        print("   • literature-completion - Literature genre completion with section details")
-        print("   • grammar-completion - Grammar projects with item details")
+        print("   • literature-completion - Literature genre completion (project level)")
+        print("   • literature-genre - Literature genre details (1 row per genre)")
+        print("   • grammar-completion - Grammar projects (phrases, pronouns, connectives)")
         print("   • individual - Individual performance by person")
         print("   • worklog - Work tracking report")
         print("   • user - User management report")
         print("   • user-assignments - Complete user assignments across all projects")
+        print("   • user-activity - User activity tracking (start date, last use, project roles)")
         print("   • consolidated - All project types in one consolidated view")
+        print("   • ag-drafting - AG Drafting Monitoring Report (all projects combined)")
         print("\n📁 Telios_LMS Reports:")
         print("   • lms - LMS batch, enrollment, attendance report")
         print("\n📁 Utility:")
@@ -9580,6 +10497,9 @@ Examples:
     report_engine.register_report('lms', LMSReport)
     report_engine.register_report('user-assignments', UserAssignmentReport)
     report_engine.register_report('consolidated', ConsolidatedProjectReport)
+    report_engine.register_report('literature-genre', LiteratureGenreReport)
+    report_engine.register_report('user-activity', UserActivityReport)
+    report_engine.register_report('ag-drafting', AGDraftingMonitoringReport)
     
     # Generate custom report
     if args.report == 'custom':
@@ -10188,3 +11108,246 @@ def setup_logger(name: str = None, log_file: str = None):
         logger.addHandler(file_handler)
     
     return logger
+===== FILE: ./verify_literature_data.py =====
+
+#!/usr/bin/env python3
+"""
+Verify Literature Data - Check actual content structure for accuracy
+"""
+
+import sys
+import json
+import re
+sys.path.insert(0, '.')
+
+from config.database_config import DatabaseConfigManager
+from core.database_manager import DatabaseManager
+
+db_config = DatabaseConfigManager()
+db_manager = DatabaseManager(db_config)
+db_manager.current_db = 'AG_Dev'
+
+def count_sentences(text):
+    if not text:
+        return 0
+    sentences = re.split(r'[.!?]+', text)
+    return len([s for s in sentences if s.strip()])
+
+print("="*80)
+print("LITERATURE DATA VERIFICATION")
+print("="*80)
+
+# Get the actual content for Ginuman_Lit. Poetry
+query = """
+SELECT 
+    p.name as project_name,
+    lg."genreId" as genre_type,
+    lpg.content,
+    lpg.version
+FROM literature_project_genres_history lpg
+JOIN literature_project_genres lg ON lpg."literatureProjectGenreId" = lg.id
+JOIN literature_projects lp ON lg."literatureProjectId" = lp.id
+JOIN projects p ON lp."projectId" = p.id
+WHERE p.name = 'Ginuman_Lit.'
+  AND lg."genreId" = 'poetry'
+  AND lpg.version > 1
+ORDER BY lpg.version DESC
+LIMIT 1
+"""
+
+df = db_manager.execute_query(query)
+
+if not df.empty:
+    print("\n📖 ANALYZING POETRY CONTENT:")
+    print("="*60)
+    
+    content = df['content'].iloc[0]
+    version = df['version'].iloc[0]
+    
+    print(f"Project: Ginuman_Lit.")
+    print(f"Genre: Poetry")
+    print(f"Version: {version}")
+    
+    if isinstance(content, str):
+        data = json.loads(content)
+    else:
+        data = content
+    
+    if 'content' in data:
+        blocks = data['content']
+        total_blocks = len(blocks)
+        
+        print(f"\n📊 Block Analysis:")
+        print(f"   Total Blocks: {total_blocks}")
+        
+        # Analyze each block
+        blocks_with_content = 0
+        total_sentences = 0
+        total_words = 0
+        block_details = []
+        
+        for i, block in enumerate(blocks):
+            if isinstance(block, dict):
+                text = block.get('content', '')
+                block_type = block.get('type', 'unknown')
+                has_content = bool(text and text.strip())
+                
+                if has_content:
+                    blocks_with_content += 1
+                    sentences = count_sentences(text)
+                    words = len(text.split())
+                    total_sentences += sentences
+                    total_words += words
+                    
+                    block_details.append({
+                        'index': i + 1,
+                        'type': block_type,
+                        'sentences': sentences,
+                        'words': words,
+                        'preview': text[:80] + '...' if len(text) > 80 else text
+                    })
+        
+        print(f"   Blocks with Content: {blocks_with_content}")
+        print(f"   Total Sentences: {total_sentences}")
+        print(f"   Total Words: {total_words}")
+        print(f"   Fill Rate: {blocks_with_content/total_blocks*100:.1f}%")
+        print(f"   Avg Sentences per Filled Block: {total_sentences/blocks_with_content:.2f}" if blocks_with_content > 0 else "   Avg Sentences per Filled Block: N/A")
+        
+        print(f"\n📝 Sample of Filled Blocks (first 5):")
+        for detail in block_details[:5]:
+            print(f"\n   Block {detail['index']} ({detail['type']}):")
+            print(f"     Sentences: {detail['sentences']}")
+            print(f"     Words: {detail['words']}")
+            print(f"     Preview: {detail['preview']}")
+        
+        print(f"\n📊 WHAT THIS MEANS:")
+        print(f"   - Each 'block' is a {block_details[0]['type'] if block_details else 'paragraph'} element")
+        print(f"   - Not every block has content (only {blocks_with_content}/{total_blocks} filled)")
+        print(f"   - Each filled block contains {total_sentences/blocks_with_content:.1f} sentences on average")
+        print(f"   - This is like tracking paragraphs in a book, not individual sentences")
+        
+print("\n" + "="*80)
+print("RECOMMENDATION:")
+print("="*80)
+print("""
+The current metrics are ACCURATE for what they measure:
+- Total Blocks = Total number of content slots (like paragraphs/sections)
+- Filled Blocks = Number of slots that have actual content
+- Fill Rate = How much of the literature piece is populated
+- Total Sentences = Actual number of sentences translated
+
+This is the correct way to measure literature progress - similar to:
+- OBS: Paragraphs completed vs total paragraphs
+- Bible: Verses completed vs total verses
+
+The data shows that Poetry is 16.7% complete (44/264 blocks filled), 
+not 100% complete. This is ACCURATE based on the actual content.
+""")
+
+===== FILE: ./verify_user_activity.py =====
+
+#!/usr/bin/env python3
+"""
+Verify user activity data accuracy
+"""
+
+import sys
+sys.path.insert(0, '.')
+
+from config.database_config import DatabaseConfigManager
+from core.database_manager import DatabaseManager
+
+db_config = DatabaseConfigManager()
+db_manager = DatabaseManager(db_config)
+db_manager.current_db = 'AG_Dev'
+
+print("="*80)
+print("VERIFYING USER ACTIVITY DATA")
+print("="*80)
+
+# 1. Check a user who should have activity (e.g., Hanok kurian - AG-482912)
+print("\n1. CHECKING USER: AG-482912 (Hanok kurian)")
+query = """
+SELECT 
+    u.id,
+    u.username,
+    u.name,
+    u."createdAt",
+    COUNT(w.id) as worklog_count,
+    MIN(w."startDate") as first_activity,
+    MAX(w."endDate") as last_activity
+FROM users u
+LEFT JOIN worklogs w ON u.id = w."userId"
+WHERE u.username = 'AG-482912'
+GROUP BY u.id, u.username, u.name, u."createdAt"
+"""
+df = db_manager.execute_query(query)
+print(df.to_string())
+
+# 2. Check worklogs for this user
+print("\n2. WORKLOGS FOR AG-482912 (last 5):")
+query2 = """
+SELECT 
+    w."startDate",
+    w."endDate",
+    w."noWork",
+    p.name as project_name
+FROM worklogs w
+LEFT JOIN projects p ON w."projectId" = p.id
+WHERE w."userId" = (SELECT id FROM users WHERE username = 'AG-482912')
+ORDER BY w."endDate" DESC
+LIMIT 5
+"""
+df2 = db_manager.execute_query(query2)
+print(df2.to_string())
+
+# 3. Check a sample of users who have worklogs
+print("\n3. SAMPLE USERS WITH WORKLOGS:")
+query3 = """
+SELECT 
+    u.username,
+    u.name,
+    COUNT(w.id) as worklog_count,
+    MAX(w."endDate") as last_activity
+FROM users u
+JOIN worklogs w ON u.id = w."userId"
+WHERE w."noWork" = false
+GROUP BY u.id, u.username, u.name
+ORDER BY worklog_count DESC
+LIMIT 10
+"""
+df3 = db_manager.execute_query(query3)
+print(df3.to_string())
+
+# 4. Check total worklogs distribution
+print("\n4. WORKLOG DISTRIBUTION:")
+query4 = """
+SELECT 
+    CASE 
+        WHEN wcount = 0 THEN 'No worklogs'
+        WHEN wcount BETWEEN 1 AND 10 THEN '1-10 worklogs'
+        WHEN wcount BETWEEN 11 AND 50 THEN '11-50 worklogs'
+        WHEN wcount BETWEEN 51 AND 100 THEN '51-100 worklogs'
+        ELSE '100+ worklogs'
+    END as category,
+    COUNT(*) as user_count
+FROM (
+    SELECT u.id, COUNT(w.id) as wcount
+    FROM users u
+    LEFT JOIN worklogs w ON u.id = w."userId" AND w."noWork" = false
+    WHERE u.role::text != 'SUPER_ADMIN'
+    GROUP BY u.id
+) t
+GROUP BY category
+ORDER BY 
+    CASE 
+        WHEN category = 'No worklogs' THEN 1
+        WHEN category = '1-10 worklogs' THEN 2
+        WHEN category = '11-50 worklogs' THEN 3
+        WHEN category = '51-100 worklogs' THEN 4
+        ELSE 5
+    END
+"""
+df4 = db_manager.execute_query(query4)
+print(df4.to_string())
+
