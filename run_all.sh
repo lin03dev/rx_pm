@@ -56,7 +56,7 @@ echo -e "${GREEN}✅ Templates generated${NC}"
 # Step 4: Generate AG_Dev Reports
 print_section "STEP 4: Generating AG_Dev Reports"
 
-reports="bible-completion obs-completion literature-completion grammar-completion individual worklog user user-assignments consolidated"
+reports="bible-completion obs-completion literature-completion grammar-completion individual worklog user user-assignments consolidated user-activity"
 for report in $reports; do
     echo -e "${YELLOW}▶ Generating $report report...${NC}"
     python3 run.py --report "$report" --database AG_Dev --format excel 2>&1 | grep -E "(✅|❌|Error|Retrieved)" || echo "   ⚠️ Could not generate $report"
@@ -80,7 +80,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 echo -e "${YELLOW}📊 Reports generated:${NC}"
 ls -la output/reports/*.xlsx 2>/dev/null | wc -l | xargs echo "   Total:"
-ls -la output/reports/*.xlsx 2>/dev/null | tail -10 | awk '{print "   • " $9}' | xargs -n1 basename
+ls -la output/reports/*.xlsx 2>/dev/null | tail -15 | awk '{print "   • " $9}' | xargs -n1 basename
 echo ""
 echo -e "${YELLOW}📋 Templates generated:${NC}"
 ls -la output/templates/*.xlsx 2>/dev/null | wc -l | xargs echo "   Total:"

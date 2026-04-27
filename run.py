@@ -26,6 +26,7 @@ from reports.lms_report import LMSReport
 from reports.user_assignment_report import UserAssignmentReport
 from reports.consolidated_project_report import ConsolidatedProjectReport
 from reports.literature_genre_report import LiteratureGenreReport
+from reports.user_activity_report import UserActivityReport
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -70,6 +71,7 @@ Examples:
   python run.py --report user-assignments --database AG_Dev
   python run.py --report consolidated --database AG_Dev
   python run.py --report literature-genre --database AG_Dev
+  python run.py --report user-activity --database AG_Dev
   
   # Telios_LMS Reports
   python run.py --report lms --database Telios_LMS_Dev
@@ -88,7 +90,8 @@ Examples:
                            'user', 'worklog', 'custom', 'individual',
                            'bible-completion', 'obs-completion', 
                            'literature-completion', 'grammar-completion',
-                           'user-assignments', 'consolidated', 'literature-genre', 'lms'
+                           'user-assignments', 'consolidated', 'literature-genre',
+                           'user-activity', 'lms'
                        ],
                        help='Type of report to generate')
     
@@ -145,6 +148,7 @@ Examples:
         print("   • worklog - Work tracking report")
         print("   • user - User management report")
         print("   • user-assignments - Complete user assignments across all projects")
+        print("   • user-activity - User activity tracking (start date, last use, project roles)")
         print("   • consolidated - All project types in one consolidated view")
         print("\n📁 Telios_LMS Reports:")
         print("   • lms - LMS batch, enrollment, attendance report")
@@ -189,6 +193,7 @@ Examples:
     report_engine.register_report('user-assignments', UserAssignmentReport)
     report_engine.register_report('consolidated', ConsolidatedProjectReport)
     report_engine.register_report('literature-genre', LiteratureGenreReport)
+    report_engine.register_report('user-activity', UserActivityReport)
     
     # Generate custom report
     if args.report == 'custom':
