@@ -1,12 +1,11 @@
 """
 AG Drafting Monitoring Report - Consolidated report for all project types
-PROJECT-LEVEL COMPLETION with proper metrics
+PROJECT-LEVEL COMPLETION with proper metrics for Bible, OBS, Literature, and Grammar
 """
 
 import pandas as pd
 import json
-import re
-from typing import Dict, Any, Set, Tuple
+from typing import Dict, Any, Set
 from reports.base_report import BaseReport
 
 
@@ -17,27 +16,69 @@ class AGDraftingMonitoringReport(BaseReport):
         super().__init__(db_manager, **kwargs)
         self.available_filters = ['country', 'language', 'project_type']
         
-        # OBS Completion Thresholds
-        self.obs_thresholds = {
+        # Map assigned book numbers to standard Bible book numbers
+        # OT: 101-166 → 1-66 (offset -100)
+        # NT: 240-266 → 40-66 (offset -200)
+        self.book_mapping = {}
+        for i in range(101, 167):
+            self.book_mapping[i] = i - 100
+        for i in range(240, 267):
+            self.book_mapping[i] = i - 200
+        
+        # OBS Completion Thresholds for translation
+        self.obs_translation_thresholds = {
             'title_required': True,
             'bibleref_required': True,
             'paragraphs_required_percent': 100
         }
+        
+        # Literature genre mapping - standard order
+        self.literature_genres = [
+            'childrens_literature', 'formal_writing', 'history', 'literature', 'narrative', 'poetry'
+        ]
+        
+        self.literature_genre_display = {
+            'childrens_literature': "Children's Literature",
+            'formal_writing': 'Formal Writing',
+            'history': 'History',
+            'literature': 'Literature',
+            'narrative': 'Narrative',
+            'poetry': 'Poetry'
+        }
     
-    def _is_obs_chapter_complete(self, data_text: str) -> bool:
-        """Check if an OBS chapter is COMPLETE based on thresholds"""
+    def _map_assigned_verse(self, verse_id: str) -> tuple:
+        """Map assigned verse ID to standard (book, chapter, verse)"""
+        if not verse_id or len(verse_id) < 9:
+            return None, None, None
+        
+        try:
+            assigned_book = int(verse_id[:3])
+            chapter = int(verse_id[3:6])
+            verse = int(verse_id[6:9])
+            
+            if assigned_book in self.book_mapping:
+                standard_book = self.book_mapping[assigned_book]
+            else:
+                standard_book = assigned_book
+            
+            return standard_book, chapter, verse
+        except:
+            return None, None, None
+    
+    def _is_obs_chapter_translated(self, data_text: str) -> bool:
+        """Check if an OBS chapter is FULLY TRANSLATED based on thresholds"""
         try:
             if not data_text or data_text == '{}':
                 return False
             
             data = json.loads(data_text)
             
-            if self.obs_thresholds['title_required']:
+            if self.obs_translation_thresholds['title_required']:
                 title = data.get('title', '')
                 if not title or not title.strip():
                     return False
             
-            if self.obs_thresholds['bibleref_required']:
+            if self.obs_translation_thresholds['bibleref_required']:
                 bibleref = data.get('bibleRef', '')
                 if not bibleref or not bibleref.strip():
                     return False
@@ -57,23 +98,20 @@ class AGDraftingMonitoringReport(BaseReport):
                 return False
             
             completion_pct = (completed_paras / required_paras) * 100
-            return completion_pct >= self.obs_thresholds['paragraphs_required_percent']
+            return completion_pct >= self.obs_translation_thresholds['paragraphs_required_percent']
             
         except:
             return False
     
     def _get_bible_verse_completion(self, project_id: str) -> Dict[str, Any]:
-        """Get Bible verse completion - count verses with ACTUAL TEXT CONTENT"""
+        """Get Bible verse completion with proper book mapping"""
         result = {
             'total_verses_assigned': 0,
             'verses_with_content': 0,
-            'completion_pct': 0,
-            'total_chapters_assigned': 0,
-            'chapters_completed': 0
+            'completion_pct': 0
         }
         
         try:
-            # Get all assigned verses for this project
             assign_query = f"""
             SELECT DISTINCT trim(unnest(string_to_array(COALESCE(verses, ''), ','))) as verse_id
             FROM users_to_projects
@@ -86,29 +124,22 @@ class AGDraftingMonitoringReport(BaseReport):
             if assign_df.empty:
                 return result
             
-            # Parse assigned verses
-            assigned_verses = set()
+            assigned_verse_keys = set()
             chapter_verses_map = {}
-            book_chapter_map = {}
             
             for _, row in assign_df.iterrows():
                 verse_id = row['verse_id'].strip()
-                if verse_id and len(verse_id) >= 9 and verse_id.isdigit():
-                    assigned_verses.add(verse_id)
-                    book = int(verse_id[:3])
-                    chapter = int(verse_id[3:6])
-                    verse = int(verse_id[6:9])
-                    key = (book, chapter)
-                    if key not in chapter_verses_map:
-                        chapter_verses_map[key] = set()
-                        book_chapter_map[key] = set()
-                    chapter_verses_map[key].add(verse)
-                    book_chapter_map[key].add(verse_id)
+                if verse_id and len(verse_id) >= 9:
+                    book, chapter, verse = self._map_assigned_verse(verse_id)
+                    if book and chapter and verse:
+                        assigned_verse_keys.add((book, chapter, verse))
+                        key = (book, chapter)
+                        if key not in chapter_verses_map:
+                            chapter_verses_map[key] = set()
+                        chapter_verses_map[key].add(verse)
             
-            result['total_verses_assigned'] = len(assigned_verses)
-            result['total_chapters_assigned'] = len(chapter_verses_map)
+            result['total_verses_assigned'] = len(assigned_verse_keys)
             
-            # Get completed content
             content_query = f"""
             SELECT ttb."bookNo", ttc."chapterNo", ttc.content::text as content_text
             FROM text_translation_chapters ttc
@@ -119,9 +150,7 @@ class AGDraftingMonitoringReport(BaseReport):
             """
             content_df = self.execute_query(content_query)
             
-            # Track verses with actual content
             verses_with_content = set()
-            chapters_with_all_verses = set()
             
             for _, row in content_df.iterrows():
                 book = row['bookNo']
@@ -143,24 +172,12 @@ class AGDraftingMonitoringReport(BaseReport):
                                 if verse_num:
                                     verse_num_int = int(verse_num)
                                     if verse_num_int in chapter_verses_map[key]:
-                                        verse_id = f"{book:03d}{chapter:03d}{verse_num_int:03d}"
-                                        verses_with_content.add(verse_id)
-                    
-                    chapter_assigned = chapter_verses_map[key]
-                    chapter_completed = set()
-                    for verse_num in chapter_assigned:
-                        verse_id = f"{book:03d}{chapter:03d}{verse_num:03d}"
-                        if verse_id in verses_with_content:
-                            chapter_completed.add(verse_num)
-                    
-                    if chapter_assigned == chapter_completed:
-                        chapters_with_all_verses.add(key)
-                        
+                                        verses_with_content.add((book, chapter, verse_num_int))
+                                        
                 except Exception as e:
                     pass
             
             result['verses_with_content'] = len(verses_with_content)
-            result['chapters_completed'] = len(chapters_with_all_verses)
             
             if result['total_verses_assigned'] > 0:
                 result['completion_pct'] = round((result['verses_with_content'] / result['total_verses_assigned']) * 100, 1)
@@ -170,7 +187,7 @@ class AGDraftingMonitoringReport(BaseReport):
         
         return result
     
-    def _get_grammar_completion(self, project_id: str, grammar_type: str) -> Dict[str, int]:
+    def _get_grammar_completion(self, project_id: str, grammar_type: str) -> Dict[str, Any]:
         """Get grammar completion metrics - PROJECT LEVEL"""
         result = {'total_items': 0, 'completed_items': 0, 'completion_pct': 0}
         
@@ -215,55 +232,76 @@ class AGDraftingMonitoringReport(BaseReport):
         
         return result
     
-    def _analyze_literature_content(self, content) -> Dict[str, int]:
-        """Analyze literature content for each genre"""
+    def _get_literature_completion(self, project_id: str) -> Dict[str, Any]:
+        """Get literature completion metrics - uses latest version per genre"""
         result = {
-            'childrens_literature': {'total_blocks': 0, 'filled_blocks': 0, 'completion_pct': 0},
-            'formal_writing': {'total_blocks': 0, 'filled_blocks': 0, 'completion_pct': 0},
-            'history': {'total_blocks': 0, 'filled_blocks': 0, 'completion_pct': 0},
-            'narrative': {'total_blocks': 0, 'filled_blocks': 0, 'completion_pct': 0},
-            'poetry': {'total_blocks': 0, 'filled_blocks': 0, 'completion_pct': 0},
-            'literature': {'total_blocks': 0, 'filled_blocks': 0, 'completion_pct': 0}
+            'total_blocks': 0,
+            'filled_blocks': 0,
+            'completion_pct': 0,
+            'genres': {}
         }
         
-        if content is None:
-            return result
-        
         try:
-            if isinstance(content, str):
-                data = json.loads(content)
-            else:
-                data = content
+            # Get latest version per genre
+            query = f"""
+            SELECT DISTINCT ON (lg."genreId")
+                lg."genreId",
+                lg.name as genre_name,
+                lpg.content,
+                lpg.version
+            FROM literature_project_genres_history lpg
+            JOIN literature_project_genres lg ON lpg."literatureProjectGenreId" = lg.id
+            JOIN literature_projects lp ON lg."literatureProjectId" = lp.id
+            WHERE lp."projectId" = '{project_id}'
+              AND lpg.version > 1
+            ORDER BY lg."genreId", lpg.version DESC
+            """
+            df = self.execute_query(query)
             
-            if 'content' in data and isinstance(data['content'], list):
-                genre_type = data.get('metadata', {}).get('genre', '')
-                if genre_type and genre_type in result:
-                    blocks = data['content']
-                    result[genre_type]['total_blocks'] = len(blocks)
-                    filled = sum(1 for b in blocks if isinstance(b, dict) and b.get('content', '').strip())
-                    result[genre_type]['filled_blocks'] = filled
-                    if len(blocks) > 0:
-                        result[genre_type]['completion_pct'] = round((filled / len(blocks)) * 100, 1)
-                else:
-                    blocks = data['content']
-                    result['literature']['total_blocks'] += len(blocks)
-                    filled = sum(1 for b in blocks if isinstance(b, dict) and b.get('content', '').strip())
-                    result['literature']['filled_blocks'] += filled
-                    if result['literature']['total_blocks'] > 0:
-                        result['literature']['completion_pct'] = round((result['literature']['filled_blocks'] / result['literature']['total_blocks']) * 100, 1)
-        except:
-            pass
+            for _, row in df.iterrows():
+                genre_id = row['genreId']
+                genre_name = self.literature_genre_display.get(genre_id, genre_id)
+                content = row['content']
+                
+                if content:
+                    try:
+                        if isinstance(content, str):
+                            data = json.loads(content)
+                        else:
+                            data = content
+                        
+                        if 'content' in data and isinstance(data['content'], list):
+                            blocks = data['content']
+                            total = len(blocks)
+                            filled = sum(1 for b in blocks if isinstance(b, dict) and b.get('content', '').strip())
+                            
+                            result['total_blocks'] += total
+                            result['filled_blocks'] += filled
+                            result['genres'][genre_name] = {
+                                'total_blocks': total,
+                                'filled_blocks': filled,
+                                'completion_pct': round((filled / total * 100), 1) if total > 0 else 0
+                            }
+                    except:
+                        pass
+            
+            if result['total_blocks'] > 0:
+                result['completion_pct'] = round((result['filled_blocks'] / result['total_blocks']) * 100, 1)
+                
+        except Exception as e:
+            print(f"  Error in Literature completion: {e}")
         
         return result
     
     def generate(self) -> Dict[str, pd.DataFrame]:
         """Generate AG Drafting Monitoring Report - PROJECT LEVEL completion"""
         
+        # Get all distinct countries and languages with projects
         query = """
         SELECT DISTINCT 
             c.name as country,
             l.name as language,
-            l."isoCode" as language_code
+            COALESCE(NULLIF(l."isoCode", ''), 'NA') as cluster
         FROM projects p
         LEFT JOIN languages l ON p."languageId" = l.id
         LEFT JOIN countries c ON p."countryId" = c.id
@@ -285,7 +323,10 @@ class AGDraftingMonitoringReport(BaseReport):
         for _, loc in locations_df.iterrows():
             country = loc['country']
             language = loc['language']
+            cluster = loc['cluster'] if loc['cluster'] else 'NA'
+            date_of_report = ''
             
+            # Get MTT names
             lang_escaped = language.replace("'", "''")
             mtt_query = f"""
             SELECT DISTINCT COALESCE(NULLIF(u.name, ''), u.username) as mtt_name
@@ -300,23 +341,48 @@ class AGDraftingMonitoringReport(BaseReport):
             mtt_df = self.execute_query(mtt_query)
             mtt_names = ', '.join(mtt_df['mtt_name'].tolist()) if not mtt_df.empty else ''
             
+            # Initialize row
             row = {
                 'Country': country,
                 'Language': language,
+                'Cluster': cluster,
+                'Language_Dup': language,
+                'Date of Report': date_of_report,
                 'MTT Names': mtt_names,
+                # OBS
                 'OBS_Chapters_Assigned': 0,
-                'OBS_Chapters_Completed': 0,
-                'OBS_Completion_%': 0,
+                'OBS_Chapters_Translated': 0,
+                # Bible
                 'Bible_Verses_Assigned': 0,
                 'Bible_Verses_Completed': 0,
-                'Bible_Completion_%': 0,
-                'Literature_Fill_%': 0,
-                'Grammar_Pronouns_%': 0,
-                'Grammar_Connectives_%': 0,
-                'Grammar_Phrases_%': 0
+                # Literature - Overall
+                'Literature_Total_Blocks': 0,
+                'Literature_Filled_Blocks': 0,
+                # Literature - Genre Breakdown
+                'Childrens_Lit_Total': 0,
+                'Childrens_Lit_Filled': 0,
+                'Formal_Writing_Total': 0,
+                'Formal_Writing_Filled': 0,
+                'History_Total': 0,
+                'History_Filled': 0,
+                'Literature_Genre_Total': 0,
+                'Literature_Genre_Filled': 0,
+                'Narrative_Total': 0,
+                'Narrative_Filled': 0,
+                'Poetry_Total': 0,
+                'Poetry_Filled': 0,
+                # Grammar
+                'Grammar_Pronouns_Total': 0,
+                'Grammar_Pronouns_Completed': 0,
+                'Grammar_Connectives_Total': 0,
+                'Grammar_Connectives_Completed': 0,
+                'Grammar_Phrases_Total': 0,
+                'Grammar_Phrases_Completed': 0
             }
             
-            # OBS Completion
+            # ============================================================
+            # OBS
+            # ============================================================
             obs_query = f"""
             SELECT p.id as project_id
             FROM projects p
@@ -358,18 +424,18 @@ class AGDraftingMonitoringReport(BaseReport):
                 """
                 complete_df = self.execute_query(complete_query)
                 
-                completed_chapters = set()
+                translated_chapters = set()
                 for _, r in complete_df.iterrows():
                     chapter_no = r['chapterNo']
                     data_text = r['data_text']
-                    if self._is_obs_chapter_complete(data_text):
-                        completed_chapters.add(chapter_no)
+                    if self._is_obs_chapter_translated(data_text):
+                        translated_chapters.add(chapter_no)
                 
-                row['OBS_Chapters_Completed'] = len([ch for ch in assigned_chapters if ch in completed_chapters])
-                if row['OBS_Chapters_Assigned'] > 0:
-                    row['OBS_Completion_%'] = round((row['OBS_Chapters_Completed'] / row['OBS_Chapters_Assigned']) * 100, 1)
+                row['OBS_Chapters_Translated'] = len([ch for ch in assigned_chapters if ch in translated_chapters])
             
-            # Bible Completion
+            # ============================================================
+            # Bible
+            # ============================================================
             bible_query = f"""
             SELECT p.id as project_id
             FROM projects p
@@ -386,9 +452,10 @@ class AGDraftingMonitoringReport(BaseReport):
                 
                 row['Bible_Verses_Assigned'] = bible_completion['total_verses_assigned']
                 row['Bible_Verses_Completed'] = bible_completion['verses_with_content']
-                row['Bible_Completion_%'] = bible_completion['completion_pct']
             
-            # Literature Completion
+            # ============================================================
+            # Literature
+            # ============================================================
             lit_query = f"""
             SELECT lp."projectId"
             FROM literature_projects lp
@@ -401,25 +468,36 @@ class AGDraftingMonitoringReport(BaseReport):
             
             if not lit_df.empty:
                 project_id = lit_df['projectId'].iloc[0]
+                lit_completion = self._get_literature_completion(project_id)
                 
-                content_query = f"""
-                SELECT lpg.content
-                FROM literature_project_genres_history lpg
-                JOIN literature_project_genres lg ON lpg."literatureProjectGenreId" = lg.id
-                JOIN literature_projects lp ON lg."literatureProjectId" = lp.id
-                WHERE lp."projectId" = '{project_id}'
-                  AND lpg.version > 1
-                ORDER BY lpg.version DESC
-                LIMIT 1
-                """
-                content_df = self.execute_query(content_query)
+                # Overall Literature
+                row['Literature_Total_Blocks'] = lit_completion['total_blocks']
+                row['Literature_Filled_Blocks'] = lit_completion['filled_blocks']
                 
-                if not content_df.empty and content_df['content'].iloc[0]:
-                    content = content_df['content'].iloc[0]
-                    analysis = self._analyze_literature_content(content)
-                    row['Literature_Fill_%'] = analysis['literature']['completion_pct']
+                # Genre Breakdown
+                for genre_name, data in lit_completion['genres'].items():
+                    if genre_name == "Children's Literature":
+                        row['Childrens_Lit_Total'] = data['total_blocks']
+                        row['Childrens_Lit_Filled'] = data['filled_blocks']
+                    elif genre_name == "Formal Writing":
+                        row['Formal_Writing_Total'] = data['total_blocks']
+                        row['Formal_Writing_Filled'] = data['filled_blocks']
+                    elif genre_name == "History":
+                        row['History_Total'] = data['total_blocks']
+                        row['History_Filled'] = data['filled_blocks']
+                    elif genre_name == "Literature":
+                        row['Literature_Genre_Total'] = data['total_blocks']
+                        row['Literature_Genre_Filled'] = data['filled_blocks']
+                    elif genre_name == "Narrative":
+                        row['Narrative_Total'] = data['total_blocks']
+                        row['Narrative_Filled'] = data['filled_blocks']
+                    elif genre_name == "Poetry":
+                        row['Poetry_Total'] = data['total_blocks']
+                        row['Poetry_Filled'] = data['filled_blocks']
             
-            # Grammar Completion
+            # ============================================================
+            # Grammar
+            # ============================================================
             for grammar_type in ['GRAMMAR_PRONOUNS', 'GRAMMAR_CONNECTIVES', 'GRAMMAR_PHRASES']:
                 grammar_query = f"""
                 SELECT p.id as project_id
@@ -436,48 +514,47 @@ class AGDraftingMonitoringReport(BaseReport):
                     completion = self._get_grammar_completion(project_id, grammar_type)
                     
                     if grammar_type == 'GRAMMAR_PRONOUNS':
-                        row['Grammar_Pronouns_%'] = completion['completion_pct']
+                        row['Grammar_Pronouns_Total'] = completion['total_items']
+                        row['Grammar_Pronouns_Completed'] = completion['completed_items']
                     elif grammar_type == 'GRAMMAR_CONNECTIVES':
-                        row['Grammar_Connectives_%'] = completion['completion_pct']
+                        row['Grammar_Connectives_Total'] = completion['total_items']
+                        row['Grammar_Connectives_Completed'] = completion['completed_items']
                     elif grammar_type == 'GRAMMAR_PHRASES':
-                        row['Grammar_Phrases_%'] = completion['completion_pct']
+                        row['Grammar_Phrases_Total'] = completion['total_items']
+                        row['Grammar_Phrases_Completed'] = completion['completed_items']
             
             report_data.append(row)
         
         report_df = pd.DataFrame(report_data)
         
+        # Reorder columns
         column_order = [
-            'Country', 'Language', 'MTT Names',
-            'OBS_Chapters_Assigned', 'OBS_Chapters_Completed', 'OBS_Completion_%',
-            'Bible_Verses_Assigned', 'Bible_Verses_Completed', 'Bible_Completion_%',
-            'Literature_Fill_%',
-            'Grammar_Pronouns_%', 'Grammar_Connectives_%', 'Grammar_Phrases_%'
+            'Country', 'Language', 'Cluster', 'Language_Dup', 'Date of Report', 'MTT Names',
+            'OBS_Chapters_Assigned', 'OBS_Chapters_Translated',
+            'Bible_Verses_Assigned', 'Bible_Verses_Completed',
+            'Literature_Total_Blocks', 'Literature_Filled_Blocks',
+            'Childrens_Lit_Total', 'Childrens_Lit_Filled',
+            'Formal_Writing_Total', 'Formal_Writing_Filled',
+            'History_Total', 'History_Filled',
+            'Literature_Genre_Total', 'Literature_Genre_Filled',
+            'Narrative_Total', 'Narrative_Filled',
+            'Poetry_Total', 'Poetry_Filled',
+            'Grammar_Pronouns_Total', 'Grammar_Pronouns_Completed',
+            'Grammar_Connectives_Total', 'Grammar_Connectives_Completed',
+            'Grammar_Phrases_Total', 'Grammar_Phrases_Completed'
         ]
         
         existing_columns = [col for col in column_order if col in report_df.columns]
         report_df = report_df[existing_columns]
-        report_df = report_df.sort_values(['Country', 'Language'])
         
-        summary_data = []
-        summary_data.append({'Metric': 'Total Languages/Countries', 'Value': len(report_df)})
-        
-        if 'OBS_Completion_%' in report_df.columns:
-            avg_obs = report_df[report_df['OBS_Chapters_Assigned'] > 0]['OBS_Completion_%'].mean()
-            summary_data.append({'Metric': 'Average OBS Completion %', 'Value': f"{round(avg_obs, 1)}%"})
-        
-        if 'Bible_Completion_%' in report_df.columns:
-            avg_bible = report_df[report_df['Bible_Verses_Assigned'] > 0]['Bible_Completion_%'].mean()
-            summary_data.append({'Metric': 'Average Bible Completion %', 'Value': f"{round(avg_bible, 1)}%"})
-        
-        summary_df = pd.DataFrame(summary_data)
+        if not report_df.empty:
+            report_df = report_df.sort_values(['Country', 'Language'])
         
         return {
-            'monitoring_report': report_df,
-            'summary_stats': summary_df
+            'monitoring_report': report_df
         }
     
     def get_sheet_names(self) -> Dict[str, str]:
         return {
-            'monitoring_report': 'AG Drafting Monitoring Report',
-            'summary_stats': 'Summary Statistics'
+            'monitoring_report': 'AG Drafting Monitoring Report'
         }
