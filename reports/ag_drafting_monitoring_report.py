@@ -345,8 +345,7 @@ class AGDraftingMonitoringReport(BaseReport):
             row = {
                 'Country': country,
                 'Language': language,
-                'Cluster': cluster,
-                'Language_Dup': language,
+                'lan_iso_code': cluster,
                 'Date of Report': date_of_report,
                 'MTT Names': mtt_names,
                 # OBS
@@ -529,7 +528,7 @@ class AGDraftingMonitoringReport(BaseReport):
         
         # Reorder columns
         column_order = [
-            'Country', 'Language', 'Cluster', 'Language_Dup', 'Date of Report', 'MTT Names',
+            'Country', 'Language', 'lan_iso_code', 'Date of Report', 'MTT Names',
             'OBS_Chapters_Assigned', 'OBS_Chapters_Translated',
             'Bible_Verses_Assigned', 'Bible_Verses_Completed',
             'Literature_Total_Blocks', 'Literature_Filled_Blocks',
