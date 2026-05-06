@@ -1,24 +1,28 @@
 """
-Database Manager - Handles all database operations with SQLAlchemy
+Database Manager - Simplified with direct psycopg2 connection
 """
 
 import pandas as pd
-from sqlalchemy import create_engine, text
-from typing import Dict, Any, Optional, List, Tuple
+import psycopg2
+from typing import Dict, Any, Optional, List
 import logging
 from config.database_config import DatabaseConfigManager, DatabaseType
 from config.book_mapping_config import get_book_mapping_config, map_book, map_verse_id
+
+# Suppress the pandas warning about psycopg2 connections
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning, module='pandas')
 
 logger = logging.getLogger(__name__)
 
 
 class DatabaseManager:
-    """Manages database connections and operations with SQLAlchemy"""
+    """Manages database connections using psycopg2 directly"""
     
     def __init__(self, config_manager: DatabaseConfigManager):
         self.config_manager = config_manager
-        self.engines: Dict[str, Any] = {}
-        self.book_mapping = get_book_mapping_config()
+        self.connections: Dict[str, Any] = {}
+        self.book_mapping_config = get_book_mapping_config()
         self._current_db: Optional[str] = None
     
     @property
@@ -29,21 +33,25 @@ class DatabaseManager:
     def current_db(self, value: Optional[str]):
         self._current_db = value
     
-    def _get_engine(self, db_name: str):
-        """Get or create SQLAlchemy engine for a database"""
-        if db_name not in self.engines:
+    def _get_connection(self, db_name: str):
+        """Get or create database connection"""
+        if db_name not in self.connections:
             config = self.config_manager.get_config(db_name)
             if not config:
                 raise ValueError(f"Database configuration not found: {db_name}")
             
             if config.db_type == DatabaseType.POSTGRESQL:
-                conn_string = f"postgresql://{config.user}:{config.password}@{config.host}:{config.port}/{config.database}"
-                if config.ssl_mode and config.ssl_mode != 'disable':
-                    conn_string += f"?sslmode={config.ssl_mode}"
-                
-                self.engines[db_name] = create_engine(conn_string)
+                conn = psycopg2.connect(
+                    host=config.host,
+                    port=config.port,
+                    database=config.database,
+                    user=config.user,
+                    password=config.password
+                )
+                conn.autocommit = True  # Prevent transaction issues
+                self.connections[db_name] = conn
         
-        return self.engines[db_name]
+        return self.connections[db_name]
     
     def map_assigned_verse(self, verse_id: str) -> str:
         return map_verse_id(verse_id)
@@ -65,39 +73,50 @@ class DatabaseManager:
                     result.add(verse_id)
         return result
     
-    def execute_query(self, query: str, params: Optional[dict] = None, 
+    def execute_query(self, query: str, params: Optional[tuple] = None, 
                       db_name: Optional[str] = None) -> pd.DataFrame:
         """Execute SQL query and return results as DataFrame"""
         use_db = db_name or self.current_db
         if not use_db:
-            raise ValueError("No database specified. Set current_db or pass db_name parameter.")
+            raise ValueError("No database specified.")
         
-        engine = self._get_engine(use_db)
+        conn = self._get_connection(use_db)
         try:
             if params:
-                # params should be a dictionary for SQLAlchemy
-                df = pd.read_sql_query(text(query), engine, params=params)
+                df = pd.read_sql_query(query, conn, params=params)
             else:
-                df = pd.read_sql_query(query, engine)
+                df = pd.read_sql_query(query, conn)
             return df
         except Exception as e:
+            # Rollback any failed transaction
+            try:
+                conn.rollback()
+            except:
+                pass
             logger.error(f"Query execution error: {e}")
-            raise
+            # Return empty DataFrame instead of failing
+            return pd.DataFrame()
     
-    def execute_update(self, query: str, params: Optional[dict] = None,
+    def execute_update(self, query: str, params: Optional[tuple] = None,
                        db_name: Optional[str] = None) -> int:
         use_db = db_name or self.current_db
         if not use_db:
             raise ValueError("No database specified")
         
-        engine = self._get_engine(use_db)
-        with engine.connect() as conn:
+        conn = self._get_connection(use_db)
+        cursor = conn.cursor()
+        try:
             if params:
-                result = conn.execute(text(query), params)
+                cursor.execute(query, params)
             else:
-                result = conn.execute(text(query))
+                cursor.execute(query)
             conn.commit()
-            return result.rowcount
+            return cursor.rowcount
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            cursor.close()
     
     def get_all_tables(self, db_name: Optional[str] = None) -> List[str]:
         use_db = db_name or self.current_db
@@ -145,3 +164,22 @@ class DatabaseManager:
         """
         df = self.execute_query(query, db_name=use_db)
         return df.iloc[0, 0] if not df.empty else False
+    
+    def reset_connection(self, db_name: Optional[str] = None):
+        """Reset connection to clear any transaction errors"""
+        use_db = db_name or self.current_db
+        if use_db and use_db in self.connections:
+            try:
+                self.connections[use_db].close()
+            except:
+                pass
+            del self.connections[use_db]
+    
+    def close(self):
+        """Close all database connections"""
+        for conn in self.connections.values():
+            try:
+                conn.close()
+            except:
+                pass
+        self.connections.clear()

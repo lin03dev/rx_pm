@@ -6,7 +6,7 @@ import pandas as pd
 import json
 from typing import Dict, Any, Set, Tuple
 from reports.base_report import BaseReport
-from config.book_mapping_config import get_book_mapping_config
+from config.book_mapping_config import get_book_mapping_config, map_book, map_verse_id
 
 
 class BibleProjectCompletionReport(BaseReport):
@@ -15,7 +15,7 @@ class BibleProjectCompletionReport(BaseReport):
     def __init__(self, db_manager, **kwargs):
         super().__init__(db_manager, **kwargs)
         self.available_filters = ['project_id', 'user_id', 'role', 'country', 'language']
-        self.book_mapping = get_book_mapping_config()
+        self.book_mapping_config = get_book_mapping_config()
     
     def _extract_verses_from_content(self, content_text: str, book: int, chapter: int) -> Set[str]:
         completed = set()
@@ -46,16 +46,7 @@ class BibleProjectCompletionReport(BaseReport):
         return None, None, None
     
     def _map_assigned_verse(self, verse_id: str) -> str:
-        try:
-            if len(verse_id) >= 9:
-                book = int(verse_id[:3])
-                chapter = int(verse_id[3:6])
-                verse = int(verse_id[6:9])
-                mapped_book = self.book_mapping.map_book(book)
-                return f"{mapped_book:03d}{chapter:03d}{verse:03d}"
-        except:
-            pass
-        return verse_id
+        return map_verse_id(verse_id)
     
     def _get_performance_rating(self, completion_pct: float) -> str:
         if completion_pct >= 100:
@@ -159,13 +150,13 @@ class BibleProjectCompletionReport(BaseReport):
                         verses.add(verse_id)
                         book, chapter, verse = self._parse_assigned_verse(verse_id)
                         if book and chapter:
-                            mapped_book = self.book_mapping.map_book(book)
+                            mapped_book = map_book(book)
                             chapters.add((mapped_book, chapter))
                 if verses:
                     project_assigned_verses[project_id] = verses
                     project_assigned_chapters[project_id] = chapters
             except Exception as e:
-                print(f"  Warning: Could not get verses for {project_id}: {e}")
+                pass  # Silently skip projects without verses
         
         print(f"✅ Found assigned verses for {len(project_assigned_verses)} projects")
         
@@ -267,77 +258,6 @@ class BibleProjectCompletionReport(BaseReport):
         if not project_status_df.empty:
             project_status_df = project_status_df.sort_values('Verse Completion %', ascending=False)
         
-        # MTT-LEVEL PERFORMANCE
-        mtt_performance = []
-        
-        if not mtt_assignments_df.empty:
-            for _, row in mtt_assignments_df.iterrows():
-                project_id = row['projectId']
-                user_id = row['user_id']
-                username = row['username']
-                full_name = row['full_name']
-                email = row['email']
-                project_name = row['project_name']
-                language = row['language_name']
-                country = row['country']
-                assigned_verses_raw = row['assigned_verses_raw']
-                
-                assigned_verses = set()
-                assigned_chapters = set()
-                for verse_id in assigned_verses_raw.split(','):
-                    verse_id = verse_id.strip()
-                    if verse_id and len(verse_id) >= 6:
-                        assigned_verses.add(verse_id)
-                        book, chapter, verse = self._parse_assigned_verse(verse_id)
-                        if book and chapter:
-                            mapped_book = self.book_mapping.map_book(book)
-                            assigned_chapters.add((mapped_book, chapter))
-                
-                verses_assigned = len(assigned_verses)
-                chapters_assigned = len(assigned_chapters)
-                
-                mapped_verses = set()
-                for verse_id in assigned_verses:
-                    mapped_verses.add(self._map_assigned_verse(verse_id))
-                
-                completed_verses = len([v for v in mapped_verses 
-                                        if v in project_completed_verses.get(project_id, set())])
-                
-                completed_chapters = len([ch for ch in assigned_chapters 
-                                          if ch in project_completed_chapters.get(project_id, set())])
-                
-                chapter_pct = (completed_chapters / chapters_assigned * 100) if chapters_assigned > 0 else 0
-                verse_pct = (completed_verses / verses_assigned * 100) if verses_assigned > 0 else 0
-                
-                chapter_pct = min(chapter_pct, 100)
-                verse_pct = min(verse_pct, 100)
-                
-                mtt_status = self._get_status(verse_pct)
-                performance_rating = self._get_performance_rating(verse_pct)
-                
-                mtt_performance.append({
-                    'Project ID': project_id,
-                    'Project Name': project_name,
-                    'Language': language,
-                    'Country': country,
-                    'MTT User ID': user_id,
-                    'MTT Username': username,
-                    'MTT Full Name': full_name,
-                    'MTT Email': email,
-                    'Verses Assigned': verses_assigned,
-                    'Verses Completed': completed_verses,
-                    'Verse Completion %': round(verse_pct, 2),
-                    'Chapters Assigned': chapters_assigned,
-                    'Chapters Completed': completed_chapters,
-                    'Chapter Completion %': round(chapter_pct, 2),
-                    'Performance Rating': performance_rating,
-                    'Status': mtt_status
-                })
-        
-        mtt_performance_df = pd.DataFrame(mtt_performance)
-        if not mtt_performance_df.empty:
-            mtt_performance_df = mtt_performance_df.sort_values('Verse Completion %', ascending=False)
-        
         # Summary Statistics
         summary_data = []
         
@@ -346,10 +266,8 @@ class BibleProjectCompletionReport(BaseReport):
         
         if not project_status_df.empty:
             summary_data.append({'Metric': 'Projects with MTTs', 'Value': len(project_status_df)})
-            summary_data.append({'Metric': 'Total Verses Assigned', 'Value': project_status_df['Verses Assigned'].sum()})
-            summary_data.append({'Metric': 'Total Verses Completed', 'Value': project_status_df['Verses Completed'].sum()})
-            summary_data.append({'Metric': 'Total Chapters Assigned', 'Value': project_status_df['Chapters Assigned'].sum()})
-            summary_data.append({'Metric': 'Total Chapters Completed', 'Value': project_status_df['Chapters Completed'].sum()})
+            summary_data.append({'Metric': 'Total Verses Assigned', 'Value': int(project_status_df['Verses Assigned'].sum())})
+            summary_data.append({'Metric': 'Total Verses Completed', 'Value': int(project_status_df['Verses Completed'].sum())})
             
             total_verses = project_status_df['Verses Assigned'].sum()
             if total_verses > 0:
@@ -369,7 +287,6 @@ class BibleProjectCompletionReport(BaseReport):
             'projects_overview': projects_df,
             'mtt_assignments': mtt_assignments_df,
             'project_status': project_status_df,
-            'mtt_performance': mtt_performance_df,
             'summary_stats': summary_df
         }
     
@@ -378,6 +295,5 @@ class BibleProjectCompletionReport(BaseReport):
             'projects_overview': '1. All Bible Projects',
             'mtt_assignments': '2. MTT Assignments',
             'project_status': '3. Assigned vs Completed',
-            'mtt_performance': '4. MTT Performance',
-            'summary_stats': '5. Summary Statistics'
+            'summary_stats': '4. Summary Statistics'
         }

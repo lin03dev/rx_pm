@@ -2,3 +2,43 @@
 output:
   default_path: './output/reports'
   timestamp_format: '%Y%m%d_%H%M%S'
+  subdirectories:
+    AG: './output/reports/AG'
+    LMS: './output/reports/LMS'
+    Telios: './output/reports/Telios'
+    Language: './output/reports/Language'
+  templates:
+    default_path: './output/templates'
+    subdirectories:
+      AG: './output/templates/AG'
+      LMS: './output/templates/LMS'
+      Telios: './output/templates/Telios'
+      Language: './output/templates/Language'
+
+databases:
+  AG_Dev:
+    project: "AG"
+    output_dir: "AG"
+    templates_dir: "AG"
+  Telios_LMS_Dev:
+    project: "LMS"
+    output_dir: "LMS"
+    templates_dir: "LMS"
+  Telios_Survey_Dev:
+    project: "Telios"
+    output_dir: "Telios"
+    templates_dir: "Telios"
+  # Add language-specific databases here
+
+reports:
+  default_format: "excel"
+  max_rows: 50000
+
+templates:
+  auto_generate_on_startup: false
+  include_example_data: true
+
+uploads:
+  max_file_size_mb: 50
+  allowed_extensions: [".xlsx", ".xls"]
+  require_approval: true

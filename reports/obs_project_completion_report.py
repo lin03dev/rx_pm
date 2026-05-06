@@ -7,6 +7,7 @@ import json
 from typing import Dict, Any, Set, Tuple
 from reports.base_report import BaseReport
 from config.obs_mapping_config import get_obs_mapping_config
+from config.dynamic_config import get_dynamic_config
 
 
 class OBSProjectCompletionReport(BaseReport):
@@ -16,6 +17,27 @@ class OBSProjectCompletionReport(BaseReport):
         super().__init__(db_manager, **kwargs)
         self.available_filters = ['project_id', 'user_id', 'role', 'country']
         self.obs_config = get_obs_mapping_config()
+        self.dynamic_config = get_dynamic_config()
+    
+    def _get_chapter_paragraph_count(self, chapter_no: int) -> int:
+        """Get paragraph count for a chapter from config"""
+        # Try to get from dynamic config first
+        obs_config = self.dynamic_config.get_obs_config()
+        chapter_paragraphs = obs_config.get('chapter_paragraphs', {})
+        
+        # Default paragraph counts if not in config
+        default_counts = {
+            1: 16, 2: 12, 3: 16, 4: 9, 5: 12, 6: 14, 7: 10, 8: 14, 9: 15,
+            10: 12, 11: 8, 12: 14, 13: 15, 14: 12, 15: 13, 16: 13, 17: 14,
+            18: 15, 19: 18, 20: 13, 21: 13, 22: 7, 23: 10, 24: 9, 25: 13,
+            26: 10, 27: 11, 28: 10, 29: 9, 30: 9, 31: 14, 32: 17, 33: 15,
+            34: 12, 35: 16, 36: 12, 37: 15, 38: 17, 39: 15, 40: 13, 41: 12,
+            42: 10, 43: 18, 44: 17, 45: 13, 46: 12, 47: 13, 48: 18, 49: 18, 50: 15
+        }
+        
+        if chapter_paragraphs:
+            return chapter_paragraphs.get(str(chapter_no), default_counts.get(chapter_no, 10))
+        return default_counts.get(chapter_no, 10)
     
     def _has_actual_content(self, data_text: str) -> Tuple[bool, int, int]:
         """Check if chapter has actual paragraph content, not just version"""
@@ -59,12 +81,28 @@ class OBSProjectCompletionReport(BaseReport):
             pass
         return 0, 0, 0, 0, 0, 0
     
-    def _get_chapter_paragraph_count(self, chapter_no: int) -> int:
-        return self.obs_config.get_chapter_paragraph_count(chapter_no)
-    
     def _get_performance_rating(self, completion_pct: float) -> str:
-        rating = self.obs_config.get_mtt_performance_rating(completion_pct)
-        return f"{rating['icon']} {rating['label']}"
+        if completion_pct >= 100:
+            return "🏆 Excellent"
+        elif completion_pct >= 75:
+            return "👍 Good"
+        elif completion_pct >= 50:
+            return "⭐ Average"
+        elif completion_pct >= 25:
+            return "📝 Needs Improvement"
+        else:
+            return "❌ Poor"
+    
+    def _get_chapter_name(self, chapter_no: int) -> str:
+        """Get chapter name from config"""
+        obs_config = self.dynamic_config.get_obs_config()
+        chapter_names = obs_config.get('chapter_names', {})
+        return chapter_names.get(str(chapter_no), f"Chapter {chapter_no}")
+    
+    def _get_completion_thresholds(self) -> Dict[str, int]:
+        """Get completion thresholds from config"""
+        obs_config = self.dynamic_config.get_obs_config()
+        return obs_config.get('completion_thresholds', {'translation': 100, 'audio': 100})
     
     def generate(self) -> Dict[str, pd.DataFrame]:
         """Generate OBS project completion report with actual content checking"""
@@ -115,7 +153,7 @@ class OBSProjectCompletionReport(BaseReport):
                 if chapters:
                     project_assigned_chapters[project_id] = chapters
             except Exception as e:
-                print(f"  Warning: Could not get chapters for {project_id}: {e}")
+                pass  # Silently skip
         
         print(f"✅ Found assigned chapters for {len(project_assigned_chapters)} projects")
         
@@ -300,7 +338,7 @@ class OBSProjectCompletionReport(BaseReport):
             title_audio_pct = min((chapters_with_title_audio / chapters_assigned * 100) if chapters_assigned > 0 else 0, 100)
             para_audio_pct = min((total_para_audio_count / paragraphs_assigned * 100) if paragraphs_assigned > 0 else 0, 100)
             
-            thresholds = self.obs_config.get_completion_thresholds()
+            thresholds = self._get_completion_thresholds()
             translation_threshold = thresholds.get('translation', 100)
             audio_threshold = thresholds.get('audio', 100)
             
@@ -315,17 +353,23 @@ class OBSProjectCompletionReport(BaseReport):
                 status = 'Not Started'
             
             project_status.append({
-                'Project ID': project_id, 'Project Name': project_name, 'Language': language, 'Country': country,
-                'MTTs Assigned': mtt_count, 'MTT Names': mtt_names[:300],
-                'Chapters Assigned': chapters_assigned, 'Chapters Completed': chapters_completed,
+                'Project ID': project_id,
+                'Project Name': project_name,
+                'Language': language,
+                'Country': country,
+                'MTTs Assigned': mtt_count,
+                'MTT Names': mtt_names[:300],
+                'Chapters Assigned': chapters_assigned,
+                'Chapters Completed': chapters_completed,
                 'Chapter Completion %': round(chapter_pct, 2),
-                'Titles Completed': titles_completed, 'Title Completion %': round(title_pct, 2),
-                'Paragraphs Assigned': paragraphs_assigned, 'Paragraphs Completed': paragraphs_completed,
+                'Paragraphs Assigned': paragraphs_assigned,
+                'Paragraphs Completed': paragraphs_completed,
                 'Paragraph Completion %': round(para_pct, 2),
-                'Total Items Assigned': total_items_assigned, 'Total Items Completed': total_items_completed,
                 'Overall Completion %': round(overall_pct, 2),
-                'Chapters with Title Audio': chapters_with_title_audio, 'Title Audio %': round(title_audio_pct, 2),
-                'Paragraphs with Audio': total_para_audio_count, 'Paragraph Audio %': round(para_audio_pct, 2),
+                'Chapters with Title Audio': chapters_with_title_audio,
+                'Title Audio %': round(title_audio_pct, 2),
+                'Paragraphs with Audio': total_para_audio_count,
+                'Paragraph Audio %': round(para_audio_pct, 2),
                 'Status': status
             })
         
@@ -333,80 +377,7 @@ class OBSProjectCompletionReport(BaseReport):
         if not project_status_df.empty:
             project_status_df = project_status_df.sort_values('Overall Completion %', ascending=False)
         
-        # 8. MTT-LEVEL PERFORMANCE
-        mtt_performance = []
-        
-        if not mtt_assignments_df.empty:
-            for _, row in mtt_assignments_df.iterrows():
-                project_id = row['projectId']
-                user_id = row['user_id']
-                username = row['username']
-                full_name = row['full_name']
-                email = row['email']
-                project_name = row['project_name']
-                language = row['language_name']
-                country = row['country']
-                assigned_chapters_raw = row['assigned_chapters_raw']
-                
-                assigned_chapters = set()
-                for ch in assigned_chapters_raw.split(','):
-                    ch = ch.strip()
-                    if ch and ch.isdigit():
-                        assigned_chapters.add(int(ch))
-                
-                chapters_assigned = len(assigned_chapters)
-                paragraphs_assigned = sum(self._get_chapter_paragraph_count(ch) for ch in assigned_chapters)
-                total_items_assigned = (chapters_assigned * 2) + paragraphs_assigned
-                
-                completed = project_completed.get(project_id, {})
-                chapters_completed = len([ch for ch in assigned_chapters if ch in completed.get('completed_chapters', set())])
-                
-                titles_completed = 0
-                biblerefs_completed = 0
-                paragraphs_completed = 0
-                
-                for chapter in assigned_chapters:
-                    if chapter in completed.get('completed_chapters', set()):
-                        titles_completed += 1
-                        biblerefs_completed += 1
-                        paragraphs_completed += self._get_chapter_paragraph_count(chapter)
-                
-                total_items_completed = titles_completed + biblerefs_completed + paragraphs_completed
-                
-                chapter_pct = min((chapters_completed / chapters_assigned * 100) if chapters_assigned > 0 else 0, 100)
-                para_pct = min((paragraphs_completed / paragraphs_assigned * 100) if paragraphs_assigned > 0 else 0, 100)
-                overall_pct = min((total_items_completed / total_items_assigned * 100) if total_items_assigned > 0 else 0, 100)
-                
-                mtt_status = self.obs_config.get_mtt_status(overall_pct)
-                performance_rating = self._get_performance_rating(overall_pct)
-                
-                mtt_performance.append({
-                    'Project ID': project_id,
-                    'Project Name': project_name,
-                    'Language': language,
-                    'Country': country,
-                    'MTT User ID': user_id,
-                    'MTT Username': username,
-                    'MTT Full Name': full_name,
-                    'MTT Email': email,
-                    'Chapters Assigned': chapters_assigned,
-                    'Chapters Completed': chapters_completed,
-                    'Chapter Completion %': round(chapter_pct, 2),
-                    'Paragraphs Assigned': paragraphs_assigned,
-                    'Paragraphs Completed': paragraphs_completed,
-                    'Paragraph Completion %': round(para_pct, 2),
-                    'Total Items Assigned': total_items_assigned,
-                    'Total Items Completed': total_items_completed,
-                    'Overall Completion %': round(overall_pct, 2),
-                    'Performance Rating': performance_rating,
-                    'Status': mtt_status
-                })
-        
-        mtt_performance_df = pd.DataFrame(mtt_performance)
-        if not mtt_performance_df.empty:
-            mtt_performance_df = mtt_performance_df.sort_values('Overall Completion %', ascending=False)
-        
-        # 9. Summary Statistics
+        # 8. Summary Statistics
         summary_data = []
         
         if not projects_df.empty:
@@ -414,10 +385,10 @@ class OBSProjectCompletionReport(BaseReport):
         
         if not project_status_df.empty:
             summary_data.append({'Metric': 'Projects with MTTs', 'Value': len(project_status_df)})
-            summary_data.append({'Metric': 'Total Chapters Assigned', 'Value': project_status_df['Chapters Assigned'].sum()})
-            summary_data.append({'Metric': 'Total Chapters Completed (with content)', 'Value': project_status_df['Chapters Completed'].sum()})
-            summary_data.append({'Metric': 'Total Paragraphs Assigned', 'Value': project_status_df['Paragraphs Assigned'].sum()})
-            summary_data.append({'Metric': 'Total Paragraphs Completed (with content)', 'Value': project_status_df['Paragraphs Completed'].sum()})
+            summary_data.append({'Metric': 'Total Chapters Assigned', 'Value': int(project_status_df['Chapters Assigned'].sum())})
+            summary_data.append({'Metric': 'Total Chapters Completed', 'Value': int(project_status_df['Chapters Completed'].sum())})
+            summary_data.append({'Metric': 'Total Paragraphs Assigned', 'Value': int(project_status_df['Paragraphs Assigned'].sum())})
+            summary_data.append({'Metric': 'Total Paragraphs Completed', 'Value': int(project_status_df['Paragraphs Completed'].sum())})
             
             total_chapters = project_status_df['Chapters Assigned'].sum()
             total_paragraphs = project_status_df['Paragraphs Assigned'].sum()
@@ -429,10 +400,12 @@ class OBSProjectCompletionReport(BaseReport):
             
             # Count projects by status
             complete = len(project_status_df[project_status_df['Status'].str.contains('Complete', na=False)])
+            translation_complete = len(project_status_df[project_status_df['Status'] == 'Translation Complete, Audio Pending'])
             in_progress = len(project_status_df[project_status_df['Status'] == 'Translation In Progress'])
             not_started = len(project_status_df[project_status_df['Status'] == 'Not Started'])
             
             summary_data.append({'Metric': 'Fully Complete Projects', 'Value': complete})
+            summary_data.append({'Metric': 'Translation Complete (Audio Pending)', 'Value': translation_complete})
             summary_data.append({'Metric': 'In Progress Projects', 'Value': in_progress})
             summary_data.append({'Metric': 'Not Started Projects', 'Value': not_started})
         
@@ -442,7 +415,6 @@ class OBSProjectCompletionReport(BaseReport):
             'projects_overview': projects_df,
             'mtt_assignments': mtt_assignments_df,
             'project_status': project_status_df,
-            'mtt_performance': mtt_performance_df,
             'summary_stats': summary_df
         }
     
@@ -451,6 +423,5 @@ class OBSProjectCompletionReport(BaseReport):
             'projects_overview': '1. All OBS Projects',
             'mtt_assignments': '2. MTT Assignments',
             'project_status': '3. Assigned vs Completed',
-            'mtt_performance': '4. MTT Performance',
-            'summary_stats': '5. Summary Statistics'
+            'summary_stats': '4. Summary Statistics'
         }

@@ -1,5 +1,5 @@
 #!/bin/bash
-# run_all.sh - Complete setup, template generation, and ALL reports generation
+# run_all.sh - Generate all reports including LMS batch reports
 
 set -e
 
@@ -11,7 +11,6 @@ echo ""
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
-RED='\033[0;31m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
@@ -35,39 +34,51 @@ source venv/bin/activate
 
 echo "📚 Installing dependencies..."
 pip install --upgrade pip -q
-pip install pandas openpyxl psycopg2-binary python-dotenv pyyaml sqlalchemy -q
+pip install pandas openpyxl psycopg2-binary python-dotenv pyyaml sqlalchemy -q 2>/dev/null
 echo -e "${GREEN}✅ Dependencies installed${NC}"
 
 # Step 2: Directory Setup
 print_section "STEP 2: Setting up directories"
-mkdir -p output/reports output/templates output/uploads output/logs config
+mkdir -p output/reports/{AG,LMS,Telios,Language}
+mkdir -p output/templates/{AG,LMS,Telios,Language}
 echo -e "${GREEN}✅ Directories created${NC}"
 
 # Step 3: Generate All Excel Templates
 print_section "STEP 3: Generating Excel templates"
-python3 -c "
-from utils.excel_template_generator import get_excel_template_generator
-gen = get_excel_template_generator()
-files = gen.generate_all_templates()
-print(f'✅ Generated {len(files)} templates')
-"
+python3 scripts/generate_templates.py
 echo -e "${GREEN}✅ Templates generated${NC}"
 
 # Step 4: Generate AG_Dev Reports
-print_section "STEP 4: Generating AG_Dev Reports"
+print_section "STEP 4: Generating AG_Dev Reports → ${CYAN}output/reports/AG/${NC}"
+python3 run.py --report consolidated --database AG_Dev --format excel
+python3 run.py --report bible-completion --database AG_Dev --format excel
+python3 run.py --report obs-completion --database AG_Dev --format excel
+python3 run.py --report literature-completion --database AG_Dev --format excel
+python3 run.py --report grammar-completion --database AG_Dev --format excel
+python3 run.py --report ag-drafting --database AG_Dev --format excel
+python3 run.py --report user --database AG_Dev --format excel
+python3 run.py --report worklog --database AG_Dev --format excel
 
-reports="bible-completion obs-completion literature-completion grammar-completion individual worklog user user-assignments consolidated user-activity ag-drafting"
-for report in $reports; do
-    echo -e "${YELLOW}▶ Generating $report report...${NC}"
-    python3 run.py --report "$report" --database AG_Dev --format excel 2>&1 | grep -E "(✅|❌|Error|Retrieved)" || echo "   ⚠️ Could not generate $report"
-done
+# Step 5: Generate LMS Reports
+print_section "STEP 5: Generating LMS Reports → ${CYAN}output/reports/LMS/${NC}"
 
-# Step 5: Generate Telios_LMS Report
-print_section "STEP 5: Generating Telios_LMS Reports"
-echo -e "${YELLOW}▶ Generating LMS demographics report...${NC}"
-python3 run.py --report lms --database Telios_LMS_Dev --format excel 2>&1 | grep -E "(✅|❌)" || echo "   ⚠️ LMS report skipped"
+# Generate LMS templates
+python3 scripts/generate_lms_templates.py
 
-# Step 6: Show Results
+# Generate batch detailed reports
+python3 scripts/generate_lms_batch_reports.py
+
+# Generate LMS summary report
+python3 run.py --report lms --database Telios_LMS_Dev --format excel
+
+# Step 6: Generate Language Survey Templates
+print_section "STEP 6: Generating Language Survey Templates → ${CYAN}output/templates/Language/${NC}"
+python3 scripts/generate_cluster_template.py
+python3 scripts/generate_dynamic_language_templates.py
+python3 scripts/generate_language_uploader_template.py
+python3 scripts/generate_dynamic_workbook.py
+
+# Step 7: Show Results
 print_section "🎉 GENERATION COMPLETE!"
 
 echo ""
@@ -75,16 +86,7 @@ echo -e "${GREEN}╔════════════════════
 echo -e "${GREEN}║                           GENERATION SUMMARY                                  ║${NC}"
 echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "${CYAN}📁 OUTPUT DIRECTORY: ./output/${NC}"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-echo -e "${YELLOW}📊 Reports generated:${NC}"
-ls -la output/reports/*.xlsx 2>/dev/null | wc -l | xargs echo "   Total:"
-ls -la output/reports/*.xlsx 2>/dev/null | tail -15 | awk '{print "   • " $9}' | xargs -n1 basename
-echo ""
-echo -e "${YELLOW}📋 Templates generated:${NC}"
-ls -la output/templates/*.xlsx 2>/dev/null | wc -l | xargs echo "   Total:"
-echo ""
-echo -e "${GREEN}✅ All tasks completed successfully!${NC}"
 
 deactivate 2>/dev/null
+
+echo -e "${GREEN}✅ All tasks completed successfully!${NC}"
