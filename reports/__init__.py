@@ -3,6 +3,8 @@ Reports Module - Export all report classes
 """
 
 from reports.base_report import BaseReport
+from reports.base_report_v2 import BaseReportV2
+from reports.base_report_v3 import BaseReportV3
 from reports.user_report import UserReport
 from reports.custom_report import CustomReport
 from reports.individual_performance_report import IndividualPerformanceReport
@@ -62,6 +64,8 @@ except ImportError:
 
 __all__ = [
     'BaseReport',
+    'BaseReportV2',
+    'BaseReportV3',
     'UserReport',
     'CustomReport',
     'IndividualPerformanceReport',
