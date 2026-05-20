@@ -25,9 +25,10 @@ class AGDraftingMonitoringReport(BaseReportV3):
             self.book_mapping[i] = i - 200
         
         # OBS Completion Thresholds for translation
+        # Title and bibleRef are optional; only paragraph completion is required.
         self.obs_translation_thresholds = {
-            'title_required': True,
-            'bibleref_required': True,
+            'title_required': False,
+            'bibleref_required': False,
             'paragraphs_required_percent': 100
         }
         
@@ -291,33 +292,33 @@ class AGDraftingMonitoringReport(BaseReportV3):
         return result
     
     def generate(self) -> Dict[str, pd.DataFrame]:
-        """Generate AG Drafting Monitoring Report using BaseReportV3 dialect support"""
+        """Generate AG Drafting Monitoring Report with one row per language-dialect-project combination"""
         
-        # Use the base class method to get all language-dialect combinations
-        combinations_df = self.get_all_language_dialect_combinations()
+        project_types = [
+            'TEXT_TRANSLATION', 'OBS', 'LITERATURE', 'LITERATURE_PROJECT',
+            'GRAMMAR_PHRASES', 'GRAMMAR_PRONOUNS', 'GRAMMAR_CONNECTIVES'
+        ]
+        projects_df = self.get_all_projects(project_types=project_types, include_dialect_info=True)
         
-        if combinations_df.empty:
-            print("❌ No language-dialect combinations found")
+        if projects_df.empty:
+            print("❌ No AG Drafting projects found")
             return {'monitoring_report': pd.DataFrame({'Message': ['No data available']})}
         
-        print(f"✅ Retrieved {len(combinations_df)} language-dialect combinations")
+        print(f"✅ Retrieved {len(projects_df)} projects for AG Drafting report")
         
         report_data = []
         
-        for _, combo in combinations_df.iterrows():
-            country = combo['country']
-            language = combo['language']
-            dialect_name = combo['dialect_name'] if combo['dialect_name'] else ''
-            rolv_code = combo['rolv_code'] if combo['rolv_code'] else ''
-            cluster = combo['lan_iso_code'] if combo['lan_iso_code'] else 'NA'
+        for _, proj in projects_df.iterrows():
+            country = proj['country'] if proj['country'] else ''
+            language = proj['language_name'] if proj['language_name'] else ''
+            dialect_name = proj['dialect_name'] if proj['dialect_name'] else ''
+            rolv_code = proj['rolv_code'] if proj['rolv_code'] else ''
+            cluster = proj['language_code'] if proj['language_code'] else 'NA'
+            project_id = proj['project_id']
+            project_type = proj['project_type']
+            project_name = proj['project_name'] if proj['project_name'] else ''
+            mtt_count, mtt_names = self.get_mtt_names_for_project(project_id)
             
-            # Get projects for this language-dialect combination
-            projects_df = self.get_projects_by_language_dialect(language, dialect_name if dialect_name else None)
-            
-            # Get MTT names for this combination
-            mtt_names = self.get_mtt_names_for_language_dialect(language, dialect_name if dialect_name else None)
-            
-            # Initialize row
             row = {
                 'Country': country,
                 'Language': language,
@@ -325,7 +326,11 @@ class AGDraftingMonitoringReport(BaseReportV3):
                 'ROLV Code': rolv_code,
                 'lan_iso_code': cluster,
                 'Date of Report': '',
+                'Project Type': project_type,
+                'Project Name': project_name,
                 'MTT Names': mtt_names,
+                'Project Count': 1,
+                'Project Names': project_name,
                 'OBS_Chapters_Assigned': 0,
                 'OBS_Chapters_Translated': 0,
                 'Bible_Verses_Assigned': 0,
@@ -352,8 +357,188 @@ class AGDraftingMonitoringReport(BaseReportV3):
                 'Grammar_Phrases_Completed': 0
             }
             
-            # Process each project
+            if project_type == 'OBS':
+                assign_query = f"""
+                SELECT DISTINCT trim(unnest(string_to_array(COALESCE("obsChapters", ''), ','))) as chapter_num
+                FROM users_to_projects
+                WHERE "projectId" = '{project_id}'
+                  AND role = 'MTT'
+                  AND "obsChapters" IS NOT NULL
+                """
+                assign_df = self.execute_query(assign_query)
+                assigned_chapters = set()
+                for _, r in assign_df.iterrows():
+                    try:
+                        ch = int(r['chapter_num'].strip())
+                        if 1 <= ch <= 50:
+                            assigned_chapters.add(ch)
+                    except:
+                        pass
+                
+                row['OBS_Chapters_Assigned'] += len(assigned_chapters)
+                
+                complete_query = f"""
+                SELECT opc."chapterNo", opc.data::text as data_text
+                FROM obs_project_chapters opc
+                JOIN obs_projects op ON opc."obsProjectId" = op.id
+                WHERE op."projectId" = '{project_id}'
+                  AND opc.version > 1
+                """
+                complete_df = self.execute_query(complete_query)
+                
+                translated_chapters = set()
+                for _, r in complete_df.iterrows():
+                    chapter_no = r['chapterNo']
+                    data_text = r['data_text']
+                    if self._is_obs_chapter_translated(data_text):
+                        translated_chapters.add(chapter_no)
+                
+                row['OBS_Chapters_Translated'] += len([ch for ch in assigned_chapters if ch in translated_chapters])
+            
+            elif project_type == 'TEXT_TRANSLATION':
+                bible_completion = self._get_bible_verse_completion(project_id)
+                row['Bible_Verses_Assigned'] += bible_completion['total_verses_assigned']
+                row['Bible_Verses_Completed'] += bible_completion['verses_with_content']
+            
+            elif project_type in ('LITERATURE', 'LITERATURE_PROJECT'):
+                lit_completion = self._get_literature_completion(project_id)
+                
+                row['Literature_Total_Blocks'] += lit_completion['total_blocks']
+                row['Literature_Filled_Blocks'] += lit_completion['filled_blocks']
+                
+                for genre_name, data in lit_completion['genres'].items():
+                    if genre_name == "Children's Literature":
+                        row['Childrens_Lit_Total'] += data['total_blocks']
+                        row['Childrens_Lit_Filled'] += data['filled_blocks']
+                    elif genre_name == "Formal Writing":
+                        row['Formal_Writing_Total'] += data['total_blocks']
+                        row['Formal_Writing_Filled'] += data['filled_blocks']
+                    elif genre_name == "History":
+                        row['History_Total'] += data['total_blocks']
+                        row['History_Filled'] += data['filled_blocks']
+                    elif genre_name == "Literature":
+                        row['Literature_Genre_Total'] += data['total_blocks']
+                        row['Literature_Genre_Filled'] += data['filled_blocks']
+                    elif genre_name == "Narrative":
+                        row['Narrative_Total'] += data['total_blocks']
+                        row['Narrative_Filled'] += data['filled_blocks']
+                    elif genre_name == "Poetry":
+                        row['Poetry_Total'] += data['total_blocks']
+                        row['Poetry_Filled'] += data['filled_blocks']
+            
+            elif project_type == 'GRAMMAR_PRONOUNS':
+                completion = self._get_grammar_completion(project_id, 'GRAMMAR_PRONOUNS')
+                row['Grammar_Pronouns_Total'] += completion['total_items']
+                row['Grammar_Pronouns_Completed'] += completion['completed_items']
+            elif project_type == 'GRAMMAR_CONNECTIVES':
+                completion = self._get_grammar_completion(project_id, 'GRAMMAR_CONNECTIVES')
+                row['Grammar_Connectives_Total'] += completion['total_items']
+                row['Grammar_Connectives_Completed'] += completion['completed_items']
+            elif project_type == 'GRAMMAR_PHRASES':
+                completion = self._get_grammar_completion(project_id, 'GRAMMAR_PHRASES')
+                row['Grammar_Phrases_Total'] += completion['total_items']
+                row['Grammar_Phrases_Completed'] += completion['completed_items']
+            
+            report_data.append(row)
+        
+        report_df = pd.DataFrame(report_data)
+        
+        # Column order
+        column_order = [
+            'Country', 'Language', 'Dialect', 'ROLV Code', 'lan_iso_code', 'Date of Report',
+            'Project Type', 'Project Name', 'MTT Names', 'Project Count', 'Project Names',
+            'OBS_Chapters_Assigned', 'OBS_Chapters_Translated',
+            'Bible_Verses_Assigned', 'Bible_Verses_Completed',
+            'Literature_Total_Blocks', 'Literature_Filled_Blocks',
+            'Childrens_Lit_Total', 'Childrens_Lit_Filled',
+            'Formal_Writing_Total', 'Formal_Writing_Filled',
+            'History_Total', 'History_Filled',
+            'Literature_Genre_Total', 'Literature_Genre_Filled',
+            'Narrative_Total', 'Narrative_Filled',
+            'Poetry_Total', 'Poetry_Filled',
+            'Grammar_Pronouns_Total', 'Grammar_Pronouns_Completed',
+            'Grammar_Connectives_Total', 'Grammar_Connectives_Completed',
+            'Grammar_Phrases_Total', 'Grammar_Phrases_Completed'
+        ]
+        
+        existing_columns = [col for col in column_order if col in report_df.columns]
+        report_df = report_df[existing_columns]
+        
+        if not report_df.empty:
+            report_df = report_df.sort_values(['Country', 'Language', 'Dialect', 'Project Name'])
+        
+        rows_with_dialect = len(report_df[report_df['Dialect'] != ''])
+        rows_without_dialect = len(report_df[report_df['Dialect'] == ''])
+        
+        print(f"✅ Generated report with {len(report_df)} rows")
+        print(f"   - Rows with dialect: {rows_with_dialect}")
+        print(f"   - Rows WITHOUT dialect (NULL dialectId): {rows_without_dialect}")
+        
+        # Build the legacy aggregated sheet by language-dialect
+        aggregated_df = self._build_language_dialect_summary()
+        
+        return {
+            'project_level': report_df,
+            'language_dialect_summary': aggregated_df
+        }
+    
+    def _build_language_dialect_summary(self) -> pd.DataFrame:
+        """Build a secondary sheet with one row per language-dialect combination"""
+        combinations_df = self.get_all_language_dialect_combinations()
+        
+        if combinations_df.empty:
+            return pd.DataFrame()
+        
+        report_data = []
+        for _, combo in combinations_df.iterrows():
+            country = combo['country']
+            language = combo['language']
+            dialect_name = combo['dialect_name'] if combo['dialect_name'] else ''
+            rolv_code = combo['rolv_code'] if combo['rolv_code'] else ''
+            cluster = combo['lan_iso_code'] if combo['lan_iso_code'] else 'NA'
+            
+            projects_df = self.get_projects_by_language_dialect(language, dialect_name if dialect_name else None)
+            mtt_names = self.get_mtt_names_for_language_dialect(language, dialect_name if dialect_name else None)
+            
+            row = {
+                'Country': country,
+                'Language': language,
+                'Dialect': dialect_name,
+                'ROLV Code': rolv_code,
+                'lan_iso_code': cluster,
+                'Date of Report': '',
+                'MTT Names': mtt_names,
+                'Project Count': 0,
+                'Project Names': '',
+                'OBS_Chapters_Assigned': 0,
+                'OBS_Chapters_Translated': 0,
+                'Bible_Verses_Assigned': 0,
+                'Bible_Verses_Completed': 0,
+                'Literature_Total_Blocks': 0,
+                'Literature_Filled_Blocks': 0,
+                'Childrens_Lit_Total': 0,
+                'Childrens_Lit_Filled': 0,
+                'Formal_Writing_Total': 0,
+                'Formal_Writing_Filled': 0,
+                'History_Total': 0,
+                'History_Filled': 0,
+                'Literature_Genre_Total': 0,
+                'Literature_Genre_Filled': 0,
+                'Narrative_Total': 0,
+                'Narrative_Filled': 0,
+                'Poetry_Total': 0,
+                'Poetry_Filled': 0,
+                'Grammar_Pronouns_Total': 0,
+                'Grammar_Pronouns_Completed': 0,
+                'Grammar_Connectives_Total': 0,
+                'Grammar_Connectives_Completed': 0,
+                'Grammar_Phrases_Total': 0,
+                'Grammar_Phrases_Completed': 0
+            }
+            
+            project_names = []
             for _, proj in projects_df.iterrows():
+                project_names.append(proj['project_name'])
                 project_id = proj['project_id']
                 project_type = proj['project_type']
                 
@@ -394,18 +579,14 @@ class AGDraftingMonitoringReport(BaseReportV3):
                             translated_chapters.add(chapter_no)
                     
                     row['OBS_Chapters_Translated'] += len([ch for ch in assigned_chapters if ch in translated_chapters])
-                
                 elif project_type == 'TEXT_TRANSLATION':
                     bible_completion = self._get_bible_verse_completion(project_id)
                     row['Bible_Verses_Assigned'] += bible_completion['total_verses_assigned']
                     row['Bible_Verses_Completed'] += bible_completion['verses_with_content']
-                
                 elif project_type in ('LITERATURE', 'LITERATURE_PROJECT'):
                     lit_completion = self._get_literature_completion(project_id)
-                    
                     row['Literature_Total_Blocks'] += lit_completion['total_blocks']
                     row['Literature_Filled_Blocks'] += lit_completion['filled_blocks']
-                    
                     for genre_name, data in lit_completion['genres'].items():
                         if genre_name == "Children's Literature":
                             row['Childrens_Lit_Total'] += data['total_blocks']
@@ -425,7 +606,6 @@ class AGDraftingMonitoringReport(BaseReportV3):
                         elif genre_name == "Poetry":
                             row['Poetry_Total'] += data['total_blocks']
                             row['Poetry_Filled'] += data['filled_blocks']
-                
                 elif project_type == 'GRAMMAR_PRONOUNS':
                     completion = self._get_grammar_completion(project_id, 'GRAMMAR_PRONOUNS')
                     row['Grammar_Pronouns_Total'] += completion['total_items']
@@ -439,13 +619,14 @@ class AGDraftingMonitoringReport(BaseReportV3):
                     row['Grammar_Phrases_Total'] += completion['total_items']
                     row['Grammar_Phrases_Completed'] += completion['completed_items']
             
+            row['Project Count'] = len(project_names)
+            row['Project Names'] = ', '.join(project_names)
             report_data.append(row)
         
-        report_df = pd.DataFrame(report_data)
-        
-        # Column order
+        aggregated_df = pd.DataFrame(report_data)
         column_order = [
-            'Country', 'Language', 'Dialect', 'ROLV Code', 'lan_iso_code', 'Date of Report', 'MTT Names',
+            'Country', 'Language', 'Dialect', 'ROLV Code', 'lan_iso_code', 'Date of Report',
+            'MTT Names', 'Project Count', 'Project Names',
             'OBS_Chapters_Assigned', 'OBS_Chapters_Translated',
             'Bible_Verses_Assigned', 'Bible_Verses_Completed',
             'Literature_Total_Blocks', 'Literature_Filled_Blocks',
@@ -459,25 +640,14 @@ class AGDraftingMonitoringReport(BaseReportV3):
             'Grammar_Connectives_Total', 'Grammar_Connectives_Completed',
             'Grammar_Phrases_Total', 'Grammar_Phrases_Completed'
         ]
-        
-        existing_columns = [col for col in column_order if col in report_df.columns]
-        report_df = report_df[existing_columns]
-        
-        if not report_df.empty:
-            report_df = report_df.sort_values(['Country', 'Language', 'Dialect'])
-        
-        rows_with_dialect = len(report_df[report_df['Dialect'] != ''])
-        rows_without_dialect = len(report_df[report_df['Dialect'] == ''])
-        
-        print(f"✅ Generated report with {len(report_df)} rows")
-        print(f"   - Rows with dialect: {rows_with_dialect}")
-        print(f"   - Rows WITHOUT dialect (NULL dialectId): {rows_without_dialect}")
-        
-        return {
-            'monitoring_report': report_df
-        }
+        existing_columns = [col for col in column_order if col in aggregated_df.columns]
+        aggregated_df = aggregated_df[existing_columns]
+        if not aggregated_df.empty:
+            aggregated_df = aggregated_df.sort_values(['Country', 'Language', 'Dialect'])
+        return aggregated_df
     
     def get_sheet_names(self) -> Dict[str, str]:
         return {
-            'monitoring_report': 'AG Drafting Monitoring Report'
+            'project_level': '1 - Project level (Lang-Dialect-Project)',
+            'language_dialect_summary': '2 - Language-Dialect Summary'
         }
