@@ -9,6 +9,7 @@ from reports.user_report import UserReport
 from reports.custom_report import CustomReport
 from reports.individual_performance_report import IndividualPerformanceReport
 from reports.lms_report import LMSReport
+from reports.lms_comprehensive_report import LMSComprehensiveReport
 
 # Dynamic reports
 try:
@@ -62,6 +63,32 @@ try:
 except ImportError:
     AGDraftingMonitoringReport = None
 
+try:
+    from reports.batch_detailed_report import BatchDetailedReport
+except ImportError:
+    BatchDetailedReport = None
+
+try:
+    from reports.batch_detail_report import BatchDetailReport
+except ImportError:
+    BatchDetailReport = None
+
+try:
+    from reports.language_survey_report import LanguageSurveyReport
+except ImportError:
+    LanguageSurveyReport = None
+
+try:
+    from reports.language_dashboard import LanguageDashboard
+except ImportError:
+    LanguageDashboard = None
+
+try:
+    from reports.telios_geojson_report import TeliosGeoJSONReport, TeliosGeoJSONDataReport
+except ImportError:
+    TeliosGeoJSONReport = None
+    TeliosGeoJSONDataReport = None
+
 __all__ = [
     'BaseReport',
     'BaseReportV2',
@@ -70,6 +97,7 @@ __all__ = [
     'CustomReport',
     'IndividualPerformanceReport',
     'LMSReport',
+    'LMSComprehensiveReport',
     'ConsolidatedReportDynamic',
     'BibleProjectCompletionReport',
     'OBSProjectCompletionReport',
@@ -80,4 +108,10 @@ __all__ = [
     'UserAssignmentReport',
     'LiteratureGenreReport',
     'AGDraftingMonitoringReport',
+    'BatchDetailedReport',
+    'BatchDetailReport',
+    'LanguageSurveyReport',
+    'LanguageDashboard',
+    'TeliosGeoJSONReport',
+    'TeliosGeoJSONDataReport',
 ]

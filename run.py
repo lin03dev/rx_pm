@@ -21,6 +21,10 @@ from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 
 def load_config(config_file: str = "config/system_config.yaml") -> dict:
     """Load configuration from YAML file"""
@@ -103,7 +107,11 @@ def register_reports(report_engine):
         
         # LMS Reports
         ('lms', 'reports.lms_report', 'LMSReport'),
+        ('lms-comprehensive', 'reports.lms_comprehensive_report', 'LMSComprehensiveReport'),
         ('lms-batch', 'reports.batch_detailed_report', 'BatchDetailedReport'),
+        ('batch-detail', 'reports.batch_detail_report', 'BatchDetailReport'),
+        ('telios-geojson', 'reports.telios_geojson_report', 'TeliosGeoJSONReport'),
+        ('telios-geojson-data', 'reports.telios_geojson_report', 'TeliosGeoJSONDataReport'),
         
         # Language Survey Reports
         ('language-survey', 'reports.language_survey_report', 'LanguageSurveyReport'),
@@ -253,7 +261,11 @@ Examples:
         print("   • literature-genre - Literature genre details")
         print("\n📁 Telios_LMS Database Reports:")
         print("   • lms - LMS summary report")
+        print("   • lms-comprehensive - Comprehensive LMS workbook")
         print("   • lms-batch - Detailed batch reports (87 batches, 11 sheets each)")
+        print("   • batch-detail - Single batch detail report")
+        print("   • telios-geojson - Telios GeoJSON summary report")
+        print("   • telios-geojson-data - Telios GeoJSON data export")
         print("\n📁 Language Survey Reports:")
         print("   • language-survey - Language survey analysis report")
         print("   • language-dashboard - Consolidated language dashboard")

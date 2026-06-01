@@ -2,6 +2,11 @@
 
 ## Run everything at once
 
+The runner uses local PostgreSQL only. Current default aliases:
+
+- `AG_Dev` -> local database `AG_Dev`
+- `Telios_LMS_Dev` -> local database `LMS_Survey_Dev`
+
 ### Windows PowerShell
 ```powershell
 cd D:\git-projects\rx_pm
