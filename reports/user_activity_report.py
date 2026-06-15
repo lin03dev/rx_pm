@@ -3,9 +3,11 @@ User Activity Report - Tracks user details, Autographa ID, start date, and last 
 Shows project-specific roles (MTT, QC, ICT, etc.) from users_to_projects
 """
 
-import pandas as pd
 from datetime import datetime
 from typing import Dict, Any
+
+import pandas as pd
+
 from reports.base_report import BaseReport
 
 
@@ -87,25 +89,47 @@ class UserActivityReport(BaseReport):
         GROUP BY u.id, u.username, u.name, u.email, u."createdAt", u."updatedAt", 
                  p."firstName", p."lastName", p.phone, p.gender, p.state,
                  c.name, c."countryCode"
-        ORDER BY u."createdAt" DESC
         """
+
+        params = {}
+        having_clauses = []
+
+        if self.filters.get('role'):
+            having_clauses.append("STRING_AGG(DISTINCT utp.role::text, ', ') ILIKE %(role)s")
+            params['role'] = f"%{self.filters['role']}%"
+
+        if self.filters.get('country'):
+            having_clauses.append("c.name = %(country)s")
+            params['country'] = self.filters['country']
+
+        if self.filters.get('has_activity') is not None:
+            has_activity = str(self.filters['has_activity']).strip().lower() in ('1', 'true', 'yes', 'y')
+            operator = ">" if has_activity else "="
+            having_clauses.append(f"""
+            (
+                SELECT COUNT(*)
+                FROM worklogs w
+                WHERE w."userId" = u.id AND w."noWork" = false
+            ) {operator} 0
+            """)
+
+        if having_clauses:
+            query += "\nHAVING " + "\n   AND ".join(having_clauses)
+
+        query += "\nORDER BY u.\"createdAt\" DESC"
         
         try:
-            df = self.execute_query(query)
-            print(f"✅ Retrieved {len(df)} users")
+            df = self.execute_query(query, params)
+            print(f"Retrieved {len(df)} users")
         except Exception as e:
-            print(f"❌ Query failed: {e}")
+            print(f"Query failed: {e}")
             df = pd.DataFrame()
         
         # Clean up and format the data
         if not df.empty:
             # Format dates
-            df['start_date'] = pd.to_datetime(df['start_date']).dt.strftime('%Y-%m-%d')
-            
-            # Handle last_use_date
-            df['last_use_date'] = pd.to_datetime(df['last_use_date']).dt.strftime('%Y-%m-%d') if df['last_use_date'].notna().any() else df['last_use_date']
-            df['first_use_date'] = pd.to_datetime(df['first_use_date']).dt.strftime('%Y-%m-%d') if df['first_use_date'].notna().any() else df['first_use_date']
-            df['last_updated'] = pd.to_datetime(df['last_updated']).dt.strftime('%Y-%m-%d')
+            for column in ['start_date', 'last_updated', 'first_use_date', 'last_use_date']:
+                df[column] = pd.to_datetime(df[column], errors='coerce').dt.strftime('%Y-%m-%d')
             
             # Handle nulls
             df['last_use_date'] = df['last_use_date'].fillna('Never used')
@@ -121,8 +145,9 @@ class UserActivityReport(BaseReport):
             df['country'] = df['country'].fillna('Not specified')
             
             # Calculate days since last use
+            today = datetime.now()
             df['days_inactive'] = df.apply(
-                lambda row: (datetime.now() - datetime.strptime(row['last_use_date'], '%Y-%m-%d')).days 
+                lambda row: (today - datetime.strptime(row['last_use_date'], '%Y-%m-%d')).days
                 if row['last_use_date'] != 'Never used' else None, axis=1
             )
             

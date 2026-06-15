@@ -6,7 +6,6 @@ Dynamic Reporting System - Main Entry Point with Complete LMS and Language Surve
 import sys
 import argparse
 import yaml
-import os
 import subprocess
 from pathlib import Path
 from datetime import datetime
@@ -15,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from config.database_config import DatabaseConfigManager
 from config.output_config import get_output_config
+from config.report_registry import grouped_configured_reports, register_configured_reports
 from core.database_manager import DatabaseManager
 from core.report_engine import ReportEngine
 from utils.logger import setup_logger
@@ -31,22 +31,16 @@ def load_config(config_file: str = "config/system_config.yaml") -> dict:
     config_path = Path(config_file)
     default_config = {
         'output': {
-            'default_path': './output/reports',
+            'reports_path': './output/reports',
+            'templates_path': './output/templates',
+            'uploads_path': './output/uploads',
+            'logs_path': './output/logs',
             'timestamp_format': '%Y%m%d_%H%M%S',
-            'subdirectories': {
-                'AG': './output/reports/AG',
-                'LMS': './output/reports/LMS',
-                'Telios': './output/reports/Telios',
-                'Language': './output/reports/Language'
-            }
-        },
-        'templates': {
-            'default_path': './output/templates',
-            'subdirectories': {
-                'AG': './output/templates/AG',
-                'LMS': './output/templates/LMS',
-                'Telios': './output/templates/Telios',
-                'Language': './output/templates/Language'
+            'categories': {
+                'AG': {'reports_path': './output/reports/AG', 'templates_path': './output/templates/AG'},
+                'LMS': {'reports_path': './output/reports/LMS', 'templates_path': './output/templates/LMS'},
+                'Telios': {'reports_path': './output/reports/Telios', 'templates_path': './output/templates/Telios'},
+                'Language': {'reports_path': './output/reports/Language', 'templates_path': './output/templates/Language'},
             }
         }
     }
@@ -55,18 +49,41 @@ def load_config(config_file: str = "config/system_config.yaml") -> dict:
         with open(config_file, 'r') as f:
             user_config = yaml.safe_load(f)
             if user_config:
-                for key in user_config:
-                    if key in default_config and isinstance(default_config[key], dict):
-                        default_config[key].update(user_config[key])
+                for key, value in user_config.items():
+                    if key in default_config and isinstance(default_config[key], dict) and isinstance(value, dict):
+                        default_config[key].update(value)
                     else:
-                        default_config[key] = user_config[key]
+                        default_config[key] = value
+
+    output_config = default_config.setdefault('output', {})
+
+    # Backward compatibility with the previous path names.
+    output_config.setdefault('reports_path', output_config.get('default_path', './output/reports'))
+    templates_config = output_config.get('templates') or default_config.get('templates', {})
+    output_config.setdefault('templates_path', templates_config.get('default_path', './output/templates'))
+    output_config.setdefault('uploads_path', './output/uploads')
+    output_config.setdefault('logs_path', './output/logs')
+
+    if 'categories' not in output_config:
+        report_dirs = output_config.get('subdirectories', {})
+        template_dirs = templates_config.get('subdirectories', {})
+        output_config['categories'] = {
+            category: {
+                'reports_path': report_path,
+                'templates_path': template_dirs.get(category, str(Path(output_config['templates_path']) / category)),
+            }
+            for category, report_path in report_dirs.items()
+        }
     
     # Create output directories
-    for subdir in default_config['output']['subdirectories'].values():
-        Path(subdir).mkdir(parents=True, exist_ok=True)
-    
-    for subdir in default_config['templates']['subdirectories'].values():
-        Path(subdir).mkdir(parents=True, exist_ok=True)
+    for path_key in ['reports_path', 'templates_path', 'uploads_path', 'logs_path']:
+        Path(output_config[path_key]).mkdir(parents=True, exist_ok=True)
+
+    for category in output_config.get('categories', {}).values():
+        if category.get('reports_path'):
+            Path(category['reports_path']).mkdir(parents=True, exist_ok=True)
+        if category.get('templates_path'):
+            Path(category['templates_path']).mkdir(parents=True, exist_ok=True)
     
     return default_config
 
@@ -74,9 +91,7 @@ def load_config(config_file: str = "config/system_config.yaml") -> dict:
 def get_output_path(config: dict, database_name: str, report_name: str, format_type: str) -> Path:
     """Get the appropriate output path based on database"""
     output_config = get_output_config()
-    category = output_config.get_database_category(database_name)
-    output_folder = output_config.get_output_folder(database_name)
-    output_root = config['output']['subdirectories'].get(output_folder, config['output']['default_path'])
+    output_root = output_config.get_output_path(database_name)
     
     timestamp = datetime.now().strftime(config['output']['timestamp_format'])
     extension = {'excel': 'xlsx', 'csv': 'csv', 'json': 'json'}.get(format_type, 'xlsx')
@@ -87,48 +102,7 @@ def get_output_path(config: dict, database_name: str, report_name: str, format_t
 
 def register_reports(report_engine):
     """Register all available reports"""
-    registered = []
-    
-    reports_to_try = [
-        # AG_Dev Reports
-        ('user', 'reports.user_report', 'UserReport'),
-        ('custom', 'reports.custom_report', 'CustomReport'),
-        ('individual', 'reports.individual_performance_report', 'IndividualPerformanceReport'),
-        ('consolidated', 'reports.consolidated_report_dynamic', 'ConsolidatedReportDynamic'),
-        ('bible-completion', 'reports.bible_project_completion_report', 'BibleProjectCompletionReport'),
-        ('obs-completion', 'reports.obs_project_completion_report', 'OBSProjectCompletionReport'),
-        ('literature-completion', 'reports.literature_project_completion_report', 'LiteratureProjectCompletionReport'),
-        ('grammar-completion', 'reports.grammar_project_completion_report', 'GrammarProjectCompletionReport'),
-        ('worklog', 'reports.worklog_report', 'WorklogReport'),
-        ('user-activity', 'reports.user_activity_report', 'UserActivityReport'),
-        ('user-assignments', 'reports.user_assignment_report', 'UserAssignmentReport'),
-        ('literature-genre', 'reports.literature_genre_report', 'LiteratureGenreReport'),
-        ('ag-drafting', 'reports.ag_drafting_monitoring_report', 'AGDraftingMonitoringReport'),
-        
-        # LMS Reports
-        ('lms', 'reports.lms_report', 'LMSReport'),
-        ('lms-comprehensive', 'reports.lms_comprehensive_report', 'LMSComprehensiveReport'),
-        ('lms-batch', 'reports.batch_detailed_report', 'BatchDetailedReport'),
-        ('batch-detail', 'reports.batch_detail_report', 'BatchDetailReport'),
-        ('telios-geojson', 'reports.telios_geojson_report', 'TeliosGeoJSONReport'),
-        ('telios-geojson-data', 'reports.telios_geojson_report', 'TeliosGeoJSONDataReport'),
-        
-        # Language Survey Reports
-        ('language-survey', 'reports.language_survey_report', 'LanguageSurveyReport'),
-        ('language-dashboard', 'reports.language_dashboard', 'LanguageDashboard'),
-    ]
-    
-    for report_name, module_path, class_name in reports_to_try:
-        try:
-            module = __import__(module_path, fromlist=[class_name])
-            report_class = getattr(module, class_name)
-            if report_class is not None:
-                report_engine.register_report(report_name, report_class)
-                registered.append(report_name)
-        except (ImportError, AttributeError) as e:
-            pass
-    
-    return registered
+    return register_configured_reports(report_engine)
 
 
 def generate_lms_batch_reports(db_manager):
@@ -224,7 +198,8 @@ Examples:
             databases = info.get("databases", [])
             print(f"\n   📂 {category}/")
             print(f"      Databases: {', '.join(databases) if databases else 'None'}")
-            print(f"      Output: output/reports/{category}/")
+            reports_path = info.get("reports_path") or f"output/reports/{category}/"
+            print(f"      Output: {reports_path}")
         return
     
     # Handle list databases
@@ -235,45 +210,23 @@ Examples:
         for db_name in db_config_manager.list_databases():
             config = db_config_manager.get_config(db_name)
             category = output_config.get_database_category(db_name)
-            output_folder = output_config.get_output_folder(db_name)
             print(f"\n   🔹 {db_name}")
             print(f"      Category: {category}")
-            print(f"      Output: output/reports/{output_folder}/")
+            print(f"      Output: {output_config.get_output_path(db_name)}")
             print(f"      Host: {config.host}")
         return
     
     # Handle list reports
     if args.list_reports:
-        print("\n📊 Available Reports by Category:")
+        print("\nReports by Category:")
         print("=" * 60)
-        print("\n📁 AG_Dev Database Reports:")
-        print("   • bible-completion - Bible translation progress")
-        print("   • obs-completion - OBS translation progress")
-        print("   • literature-completion - Literature genre completion")
-        print("   • grammar-completion - Grammar projects")
-        print("   • ag-drafting - AG Drafting Monitoring Report")
-        print("   • consolidated - All project types combined")
-        print("   • user - User management report")
-        print("   • worklog - Work tracking report")
-        print("   • individual - Individual performance by person")
-        print("   • user-activity - User activity tracking")
-        print("   • user-assignments - User assignments across projects")
-        print("   • literature-genre - Literature genre details")
-        print("\n📁 Telios_LMS Database Reports:")
-        print("   • lms - LMS summary report")
-        print("   • lms-comprehensive - Comprehensive LMS workbook")
-        print("   • lms-batch - Detailed batch reports (87 batches, 11 sheets each)")
-        print("   • batch-detail - Single batch detail report")
-        print("   • telios-geojson - Telios GeoJSON summary report")
-        print("   • telios-geojson-data - Telios GeoJSON data export")
-        print("\n📁 Language Survey Reports:")
-        print("   • language-survey - Language survey analysis report")
-        print("   • language-dashboard - Consolidated language dashboard")
-        print("\n📁 Utility:")
-        print("   • custom - Execute custom SQL queries")
+        for _, category_info, reports in grouped_configured_reports():
+            print(f"\n{category_info.get('display_name', 'Reports')}:")
+            for report in reports:
+                print(f"   - {report['id']} - {report['description']}")
         print("=" * 60)
         return
-    
+
     # Handle generate templates
     if args.generate_templates:
         print("\n📋 Generating all templates...")
@@ -301,6 +254,13 @@ Examples:
     
     # Handle regular report generation
     if args.report and args.database:
+        filters = {}
+        if args.filters:
+            for item in args.filters:
+                if '=' in item:
+                    key, value = item.split('=', 1)
+                    filters[key] = value
+
         db_manager = DatabaseManager(DatabaseConfigManager())
         db_manager.current_db = args.database
         
@@ -328,18 +288,19 @@ Examples:
         registered = register_reports(report_engine)
         
         category = output_config.get_database_category(args.database)
-        output_folder = output_config.get_output_folder(args.database)
+        output_path = output_config.get_output_path(args.database)
         
         print(f"\n📊 Generating {args.report.upper()} report...")
         print(f"   Database: {args.database}")
         print(f"   Category: {category}")
         print(f"   Format: {args.format}")
-        print(f"   Output: output/reports/{output_folder}/")
+        print(f"   Output: {output_path}")
         
         try:
             output_file = report_engine.generate_report(
                 report_name=args.report,
                 output_format=args.format,
+                filters=filters,
                 db_name=args.database
             )
             print(f"\n✅ Report generated successfully!")

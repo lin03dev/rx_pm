@@ -7,10 +7,10 @@ from typing import Dict, Any, List, Optional, Type
 from datetime import datetime
 import logging
 import json
-import os
 from pathlib import Path
 
 from core.database_manager import DatabaseManager
+from config.output_config import get_output_config
 from reports.base_report import BaseReport
 from utils.excel_formatter import ExcelFormatter
 from utils.logger import setup_logger
@@ -25,7 +25,8 @@ class ReportEngine:
         self.config = config
         self.reports = {}
         self.report_instances = {}
-        self.output_path = config.get('output', {}).get('default_path', './output/reports')
+        output_config = config.get('output', {})
+        self.output_path = output_config.get('reports_path') or output_config.get('default_path', './output/reports')
         
         # Create output directory
         Path(self.output_path).mkdir(parents=True, exist_ok=True)
@@ -57,7 +58,7 @@ class ReportEngine:
             report.apply_filters(filters)
         
         data = report.generate()
-        output_file = self._get_output_filename(report_name, output_format)
+        output_file = self._get_output_filename(report_name, output_format, db_name=db_name)
         
         if output_format == 'excel':
             self._save_as_excel(data, output_file, report.get_sheet_names())
@@ -80,7 +81,7 @@ class ReportEngine:
         except Exception as e:
             data = pd.DataFrame({'Error': [str(e)], 'Query': [query[:500]]})
         
-        output_file = self._get_output_filename(report_name, output_format)
+        output_file = self._get_output_filename(report_name, output_format, db_name=db_name)
         
         if output_format == 'excel':
             with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
@@ -95,14 +96,16 @@ class ReportEngine:
         logger.info(f"Custom report generated: {output_file}")
         return output_file
     
-    def _get_output_filename(self, report_name: str, format_type: str) -> str:
+    def _get_output_filename(self, report_name: str, format_type: str, db_name: Optional[str] = None) -> str:
         """Generate output filename with timestamp"""
         extension_map = {'excel': 'xlsx', 'csv': 'csv', 'json': 'json'}
         extension = extension_map.get(format_type, 'xlsx')
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         clean_name = report_name.replace(' ', '_').lower()
         filename = f"{clean_name}_{timestamp}.{extension}"
-        return os.path.join(self.output_path, filename)
+        output_path = get_output_config().get_output_path(db_name) if db_name else self.output_path
+        Path(output_path).mkdir(parents=True, exist_ok=True)
+        return str(Path(output_path) / filename)
     
     def _save_as_excel(self, data: Dict[str, pd.DataFrame], 
                       filename: str, sheet_names: Dict[str, str]):

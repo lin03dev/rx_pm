@@ -6,6 +6,9 @@ import os
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
+
+import yaml
 from dotenv import load_dotenv
 
 load_dotenv('config/passwords.env')
@@ -77,6 +80,44 @@ class DatabaseConfigManager:
             environment='development',
             project='Telios_LMS'
         )
+
+        self._load_system_database_metadata()
+
+    def _load_system_database_metadata(self):
+        """Apply database metadata from system_config.yaml."""
+        config_path = Path('config/system_config.yaml')
+        if not config_path.exists():
+            return
+
+        with config_path.open('r', encoding='utf-8') as f:
+            system_config = yaml.safe_load(f) or {}
+
+        database_items = system_config.get('databases', {}).get('items', {})
+        for db_name, db_info in database_items.items():
+            project = db_info.get('project')
+            category = db_info.get('category') or project
+
+            if db_name in self.databases:
+                if project:
+                    self.databases[db_name].project = project
+                if category:
+                    self.databases[db_name].description = self.databases[db_name].description or f"{category} Database"
+                continue
+
+            env_prefix = db_name.upper()
+            self.databases[db_name] = DatabaseConfig(
+                name=db_name,
+                db_type=DatabaseType.POSTGRESQL,
+                host=os.getenv(f'{env_prefix}_HOST', 'localhost'),
+                port=int(os.getenv(f'{env_prefix}_PORT', '5432')),
+                database=os.getenv(f'{env_prefix}_DATABASE', db_name),
+                user=os.getenv(f'{env_prefix}_USER', 'postgres'),
+                password=os.getenv(f'{env_prefix}_PASSWORD', 'postgres'),
+                ssl_mode='disable',
+                description=f"{category or project or db_name} Database",
+                environment='development',
+                project=project or category
+            )
     
     def get_config(self, db_name: str) -> Optional[DatabaseConfig]:
         return self.databases.get(db_name)

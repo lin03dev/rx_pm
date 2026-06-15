@@ -1,34 +1,44 @@
-# System Configuration
+# System configuration.
+# Report definitions live in config/report_config.yaml.
+
 output:
-  default_path: './output/reports'
-  timestamp_format: '%Y%m%d_%H%M%S'
-  subdirectories:
-    AG: './output/reports/AG'
-    LMS: './output/reports/LMS'
-    Telios: './output/reports/Telios'
-    Language: './output/reports/Language'
-  templates:
-    default_path: './output/templates'
-    subdirectories:
-      AG: './output/templates/AG'
-      LMS: './output/templates/LMS'
-      Telios: './output/templates/Telios'
-      Language: './output/templates/Language'
+  reports_path: "./output/reports"
+  templates_path: "./output/templates"
+  uploads_path: "./output/uploads"
+  logs_path: "./output/logs"
+  timestamp_format: "%Y%m%d_%H%M%S"
+  categories:
+    AG:
+      reports_path: "./output/reports/AG"
+      templates_path: "./output/templates/AG"
+    LMS:
+      reports_path: "./output/reports/LMS"
+      templates_path: "./output/templates/LMS"
+    Telios:
+      reports_path: "./output/reports/Telios"
+      templates_path: "./output/templates/Telios"
+    Language:
+      reports_path: "./output/reports/Language"
+      templates_path: "./output/templates/Language"
 
 databases:
-  AG_Dev:
-    project: "AG"
-    output_dir: "AG"
-    templates_dir: "AG"
-  Telios_LMS_Dev:
-    project: "LMS"
-    output_dir: "LMS"
-    templates_dir: "LMS"
-  Telios_Survey_Dev:
-    project: "Telios"
-    output_dir: "Telios"
-    templates_dir: "Telios"
-  # Add language-specific databases here
+  default: "AG_Dev"
+  items:
+    AG_Dev:
+      project: "AG"
+      category: "AG"
+      output_category: "AG"
+      template_category: "AG"
+    Telios_LMS_Dev:
+      project: "LMS"
+      category: "LMS"
+      output_category: "LMS"
+      template_category: "LMS"
+    Telios_Survey_Dev:
+      project: "Telios"
+      category: "Telios"
+      output_category: "Telios"
+      template_category: "Telios"
 
 reports:
   default_format: "excel"

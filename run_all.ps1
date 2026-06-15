@@ -19,6 +19,52 @@ function Invoke-PythonStep {
     }
 }
 
+function Get-PythonVersion {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Command,
+
+        [string[]]$Arguments = @()
+    )
+
+    try {
+        $version = & $Command @Arguments -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
+        if ($LASTEXITCODE -eq 0) {
+            return $version.Trim()
+        }
+    }
+    catch {
+        return $null
+    }
+
+    return $null
+}
+
+function Get-Python310Command {
+    $candidates = @(
+        @{ Display = 'py -3.10'; Command = 'py'; Arguments = @('-3.10') },
+        @{ Display = 'python'; Command = 'python'; Arguments = @() },
+        @{ Display = 'python3'; Command = 'python3'; Arguments = @() }
+    )
+
+    foreach ($candidate in $candidates) {
+        $version = Get-PythonVersion -Command $candidate.Command -Arguments $candidate.Arguments
+        if ($version -eq '3.10') {
+            return $candidate
+        }
+    }
+
+    throw @"
+Python 3.10 was not found.
+
+Install it with:
+  py install 3.10
+
+Or activate an existing Python 3.10 environment, then run:
+  .\run_all.ps1
+"@
+}
+
 function Test-LocalDatabases {
     Invoke-PythonStep @('.\scripts\check_databases.py')
 }
@@ -27,13 +73,23 @@ Write-Host "==============================================="
 Write-Host "  UNIFIED REPORTING SYSTEM - COMPLETE RUN"
 Write-Host "===============================================`n"
 
-if (-not (Test-Path -Path "venv")) {
+$venvActivationPath = ".\venv\Scripts\Activate.ps1"
+
+if (-not (Test-Path -Path $venvActivationPath)) {
     Write-Host "Creating virtual environment..."
-    py -3.10 -m venv venv
+    $python310 = Get-Python310Command
+    Write-Host "Using Python 3.10 from $($python310.Display)"
+    & $python310.Command @($python310.Arguments + @('-m', 'venv', 'venv'))
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to create virtual environment with $($python310.Display)"
+    }
 }
 
 Write-Host "Activating virtual environment..."
-. .\venv\Scripts\Activate.ps1
+if (-not (Test-Path -Path $venvActivationPath)) {
+    throw "Virtual environment activation script was not found at $venvActivationPath"
+}
+. $venvActivationPath
 
 Write-Host "Installing dependencies..."
 Invoke-PythonStep @('-m', 'pip', 'install', '--upgrade', 'pip')

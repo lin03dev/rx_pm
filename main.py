@@ -7,36 +7,29 @@ Single entry point for reports, templates, and data uploads
 import sys
 import argparse
 import yaml
-import json
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, Optional, List
+from typing import Dict, List
 
 sys.path.insert(0, str(Path(__file__).parent))
 
 from config.database_config import DatabaseConfigManager
 from config.excel_template_config import TemplatePurpose, get_excel_template_manager
-from config.project_type_config import get_project_type_config_manager
-from config.report_templates import get_report_template_config
+from config.report_registry import list_configured_reports, load_report_catalog, register_configured_reports
 
 from core.database_manager import DatabaseManager
 from core.report_engine import ReportEngine
 from core.template_uploader import TemplateUploader
-
-from reports.user_report import UserReport
-from reports.worklog_report import WorklogReport
-from reports.custom_report import CustomReport
-from reports.individual_performance_report import IndividualPerformanceReport
-from reports.bible_project_completion_report import BibleProjectCompletionReport
-from reports.obs_project_completion_report import OBSProjectCompletionReport
-from reports.literature_project_completion_report import LiteratureProjectCompletionReport
-from reports.grammar_project_completion_report import GrammarProjectCompletionReport
 
 from utils.excel_template_generator import get_excel_template_generator, ExcelTemplateValidator
 from utils.logger import setup_logger
 
 # Setup logger
 logger = setup_logger(__name__)
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 
 class UnifiedSystem:
@@ -60,9 +53,10 @@ class UnifiedSystem:
                 'templates_path': './output/templates',
                 'uploads_path': './output/uploads',
                 'logs_path': './output/logs',
-                'timestamp_format': '%Y%m%d_%H%M%S'
+                'timestamp_format': '%Y%m%d_%H%M%S',
+                'categories': {}
             },
-            'database': {
+            'databases': {
                 'default': 'AG_Dev'
             },
             'reports': {
@@ -86,9 +80,26 @@ class UnifiedSystem:
                 if user_config:
                     self._deep_merge(default_config, user_config)
         
+        output_config = default_config['output']
+        output_config.setdefault('categories', {})
+
+        # Backward compatibility with previous path names.
+        if 'templates' in output_config:
+            output_config.setdefault('templates_path', output_config['templates'].get('default_path', './output/templates'))
+        output_config.setdefault('reports_path', output_config.get('default_path', './output/reports'))
+        output_config.setdefault('templates_path', './output/templates')
+        output_config.setdefault('uploads_path', './output/uploads')
+        output_config.setdefault('logs_path', './output/logs')
+
         # Create output directories
         for path_key in ['reports_path', 'templates_path', 'uploads_path', 'logs_path']:
-            Path(default_config['output'][path_key]).mkdir(parents=True, exist_ok=True)
+            Path(output_config[path_key]).mkdir(parents=True, exist_ok=True)
+
+        for category in output_config.get('categories', {}).values():
+            if category.get('reports_path'):
+                Path(category['reports_path']).mkdir(parents=True, exist_ok=True)
+            if category.get('templates_path'):
+                Path(category['templates_path']).mkdir(parents=True, exist_ok=True)
         
         return default_config
     
@@ -102,7 +113,7 @@ class UnifiedSystem:
     
     def _init_db(self, db_name: str = None):
         """Initialize database connection"""
-        db_name = db_name or self.config['database']['default']
+        db_name = db_name or self.config['databases']['default']
         if self.db_manager is None or self.db_manager.current_db != db_name:
             self.db_manager = DatabaseManager(self.db_config_manager)
             self.db_manager.current_db = db_name
@@ -111,14 +122,7 @@ class UnifiedSystem:
     
     def _register_reports(self):
         """Register all available reports"""
-        self.report_engine.register_report('user', UserReport)
-        self.report_engine.register_report('worklog', WorklogReport)
-        self.report_engine.register_report('custom', CustomReport)
-        self.report_engine.register_report('individual', IndividualPerformanceReport)
-        self.report_engine.register_report('bible-completion', BibleProjectCompletionReport)
-        self.report_engine.register_report('obs-completion', OBSProjectCompletionReport)
-        self.report_engine.register_report('literature-completion', LiteratureProjectCompletionReport)
-        self.report_engine.register_report('grammar-completion', GrammarProjectCompletionReport)
+        register_configured_reports(self.report_engine)
     
     # ============================================================
     # Report Generation Methods
@@ -144,28 +148,7 @@ class UnifiedSystem:
     def list_reports(self) -> List[Dict]:
         """List all available reports with details"""
         self._init_db()
-        reports = []
-        
-        report_info = {
-            'user': {'name': 'User Report', 'description': 'User management and assignments', 'filters': ['role', 'country']},
-            'worklog': {'name': 'Worklog Report', 'description': 'Work tracking and productivity', 'filters': ['role', 'stage', 'software']},
-            'individual': {'name': 'Individual Performance', 'description': 'Per-person performance across all projects', 'filters': ['user_id', 'role', 'country']},
-            'bible-completion': {'name': 'Bible Project Completion', 'description': 'Bible translation progress (verses + chapters)', 'filters': ['project_id', 'user_id', 'country', 'language']},
-            'obs-completion': {'name': 'OBS Project Completion', 'description': 'OBS translation + audio progress', 'filters': ['project_id', 'user_id', 'country']},
-            'literature-completion': {'name': 'Literature Project Completion', 'description': 'Literature genre completion', 'filters': ['project_id', 'user_id']},
-            'grammar-completion': {'name': 'Grammar Project Completion', 'description': 'Grammar phrases/pronouns/connectives', 'filters': ['project_id', 'user_id']},
-            'custom': {'name': 'Custom Report', 'description': 'Execute custom SQL queries', 'filters': []}
-        }
-        
-        for key, info in report_info.items():
-            reports.append({
-                'id': key,
-                'name': info['name'],
-                'description': info['description'],
-                'available_filters': info['filters']
-            })
-        
-        return reports
+        return list_configured_reports()
     
     # ============================================================
     # Template Generation Methods
@@ -265,6 +248,8 @@ class UnifiedSystem:
 # ============================================================
 
 def main():
+    report_choices = sorted(load_report_catalog().keys())
+
     parser = argparse.ArgumentParser(
         description='Unified Reporting & Data Management System',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -306,9 +291,7 @@ def main():
     # ============================================================
     report_parser = subparsers.add_parser('report', help='Generate a report')
     report_parser.add_argument('--type', '-t', required=True, 
-                               choices=['user', 'worklog', 'individual', 'bible-completion', 
-                                       'obs-completion', 'literature-completion', 
-                                       'grammar-completion', 'custom'],
+                               choices=report_choices,
                                help='Type of report to generate')
     report_parser.add_argument('--db', '-d', help='Database name (default: AG_Dev)')
     report_parser.add_argument('--format', '-f', choices=['excel', 'csv', 'json'], 
