@@ -1,0 +1,39 @@
+# Default production database sources used by the reporting dashboard.
+# Credentials are loaded from passwords.env via connection_string_env keys.
+
+databases:
+  - name: "LMS"
+    source_dump: "LMS_Survey_Prod.dump"
+    target_db: "LMS_Survey_Dev"
+    enabled: true
+    project: "LMS"
+    category: "LMS"
+    environment: "production"
+    description: "LMS production database"
+    source_config:
+      connection_string_env: "LMS_CONNECTION_STRING"
+      pg_dump_path: "/usr/bin/pg_dump"
+
+  - name: "AG"
+    source_dump: "AG_Prod.dump"
+    target_db: "AG_Dev"
+    enabled: true
+    project: "AG"
+    category: "AG"
+    environment: "production"
+    description: "AG production read-only database"
+    source_config:
+      connection_string_env: "AG_CONNECTION_STRING"
+      pg_dump_path: "pg_dump"
+
+  - name: "Telios"
+    source_dump: "Telios_Prod.dump"
+    target_db: "Telios_Dev"
+    enabled: true
+    project: "Telios"
+    category: "Telios"
+    environment: "production"
+    description: "Telios production database"
+    source_config:
+      connection_string_env: "TELIOS_CONNECTION_STRING"
+      pg_dump_path: "pg_dump"

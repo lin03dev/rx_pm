@@ -1,0 +1,70 @@
+# System configuration.
+# Report catalogue and output definitions live in config/schema_registry.yaml (report_definitions).
+
+output:
+  reports_path: "./backend/output/reports"
+  templates_path: "./backend/output/templates"
+  uploads_path: "./backend/output/uploads"
+  logs_path: "./backend/output/logs"
+  timestamp_format: "%Y%m%d_%H%M%S"
+  categories:
+    AG:
+      reports_path: "./backend/output/reports/AG"
+      templates_path: "./backend/output/templates/AG"
+    LMS:
+      reports_path: "./backend/output/reports/LMS"
+      templates_path: "./backend/output/templates/LMS"
+    Telios:
+      reports_path: "./backend/output/reports/Telios"
+      templates_path: "./backend/output/templates/Telios"
+    Language:
+      reports_path: "./backend/output/reports/Language"
+      templates_path: "./backend/output/templates/Language"
+      databases: [Telios, Telios_Dev]
+
+databases:
+  default: "AG"
+  items:
+    AG:
+      project: "AG"
+      category: "AG"
+      output_category: "AG"
+      template_category: "AG"
+    LMS:
+      project: "LMS"
+      category: "LMS"
+      output_category: "LMS"
+      template_category: "LMS"
+    Telios:
+      project: "Telios"
+      category: "Telios"
+      output_category: "Telios"
+      template_category: "Telios"
+    AG_Dev:
+      project: "AG"
+      category: "AG"
+      output_category: "AG"
+      template_category: "AG"
+    LMS_Dev:
+      project: "LMS"
+      category: "LMS"
+      output_category: "LMS"
+      template_category: "LMS"
+    Telios_Dev:
+      project: "Telios"
+      category: "Telios"
+      output_category: "Telios"
+      template_category: "Telios"
+
+reports:
+  default_format: "excel"
+  max_rows: 50000
+
+templates:
+  auto_generate_on_startup: false
+  include_example_data: true
+
+uploads:
+  max_file_size_mb: 50
+  allowed_extensions: [".xlsx", ".xls"]
+  require_approval: true

@@ -47,7 +47,7 @@ reports:
 templates:
   auto_generate_on_startup: false
   include_example_data: true
-
+  
 uploads:
   max_file_size_mb: 50
   allowed_extensions: [".xlsx", ".xls"]

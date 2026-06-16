@@ -23,6 +23,8 @@ ENV/
 
 # Output directories
 output/
+backend/output/
+backend/artifacts/
 *.xlsx
 *.csv
 *.json
@@ -34,9 +36,13 @@ dist/
 frontend/node_modules/
 frontend/dist/
 
-# Database passwords
-config/passwords.env
+# Database passwords and user-defined connections
+backend/config/passwords.env
+backend/config/user_connections.yaml
+backend/config/active_databases.yaml
 *.env
+.~lock.*
+**/.~lock.*
 
 # OS files
 .DS_Store

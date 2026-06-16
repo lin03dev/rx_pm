@@ -1,0 +1,8 @@
+# Default active production databases for the dashboard.
+# Copy to active_databases.yaml or let the app default to LMS, AG, and Telios.
+
+active:
+  - LMS
+  - AG
+  - Telios
+primary: AG

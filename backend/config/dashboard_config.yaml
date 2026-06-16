@@ -1,0 +1,296 @@
+# Dashboard insight definitions — KPI cards per project with drill-down navigation.
+# Source types: report_metric, report_row_count, report_aggregate
+
+AG:
+  - id: total_users
+    label: Total Users
+    description: Registered users across AG
+    format: number
+    source:
+      type: report_metric
+      report_id: user-activity
+      sheet: "5 - Summary Statistics"
+      metric: "Total Users"
+    navigate:
+      report_id: user-activity
+      sub_tab: data
+      sheet: "1 - All Users"
+
+  - id: active_30d
+    label: Active (30 days)
+    description: Users with activity in the last 30 days
+    format: number
+    source:
+      type: report_metric
+      report_id: user-activity
+      sheet: "5 - Summary Statistics"
+      metric: "Active in Last 30 Days"
+    navigate:
+      report_id: user-activity
+      sub_tab: data
+      sheet: "2 - Active Users (with work)"
+      filters:
+        has_activity: "true"
+
+  - id: active_60d
+    label: Active (60 days)
+    description: Users with activity in the last 60 days
+    format: number
+    source:
+      type: report_metric
+      report_id: user-activity
+      sheet: "5 - Summary Statistics"
+      metric: "Active in Last 60 Days"
+    navigate:
+      report_id: user-activity
+      sub_tab: data
+      sheet: "2 - Active Users (with work)"
+      filters:
+        has_activity: "true"
+
+  - id: inactive_users
+    label: Inactive Users
+    description: Users with no worklog activity
+    format: number
+    source:
+      type: report_metric
+      report_id: user-activity
+      sheet: "5 - Summary Statistics"
+      metric: "Inactive Users (no worklogs)"
+    navigate:
+      report_id: user-activity
+      sub_tab: data
+      sheet: "3 - Inactive Users (no work)"
+
+  - id: overall_completion
+    label: Overall Completion
+    description: Average completion across AG projects
+    format: text
+    source:
+      type: report_metric
+      report_id: consolidated
+      sheet: "2. Summary Statistics"
+      metric: "Overall Completion Rate"
+    navigate:
+      report_id: consolidated
+      sub_tab: data
+      sheet: "1. Project Status"
+
+  - id: project_count
+    label: Active Projects
+    description: Projects tracked in consolidated report
+    format: number
+    source:
+      type: report_row_count
+      report_id: consolidated
+      sheet: "1. Project Status"
+    navigate:
+      report_id: consolidated
+      sub_tab: data
+      sheet: "1. Project Status"
+
+LMS:
+  - id: bt_academy_students
+    label: BT Academy Students
+    description: Unique enrolled students in the standard roster
+    format: number
+    source:
+      type: report_metric
+      report_id: bt-academy-students
+      sheet: "Summary Statistics"
+      metric: "Unique students (one roster row each)"
+    navigate:
+      report_id: bt-academy-students
+      sub_tab: data
+      sheet: "BT Academy Students"
+
+  - id: bt_academy_active
+    label: Active Students
+    description: Students with current status Active
+    format: number
+    source:
+      type: report_metric
+      report_id: bt-academy-students
+      sheet: "Summary Statistics"
+      metric: "Students Active"
+    navigate:
+      report_id: bt-academy-students
+      sub_tab: data
+      sheet: "BT Academy Students"
+      filters:
+        status: Active
+
+  - id: bt_academy_inactive
+    label: Inactive Students
+    description: Students marked inactive or rejected
+    format: number
+    source:
+      type: report_metric
+      report_id: bt-academy-students
+      sheet: "Summary Statistics"
+      metric: "Students Inactive"
+    navigate:
+      report_id: bt-academy-students
+      sub_tab: data
+      sheet: "BT Academy Students"
+      filters:
+        status: Inactive
+
+  - id: bt_academy_rejected
+    label: Validation Rejected
+    description: Students with rejected validation status
+    format: number
+    source:
+      type: report_metric
+      report_id: bt-academy-students
+      sheet: "Summary Statistics"
+      metric: "Validation Rejected"
+    navigate:
+      report_id: bt-academy-students
+      sub_tab: data
+      sheet: "BT Academy Students"
+      filters:
+        validation_status: Rejected
+
+  - id: total_batches
+    label: Total Batches
+    description: LMS training batches
+    format: number
+    source:
+      type: report_metric
+      report_id: lms
+      sheet: "Summary Statistics"
+      metric: "Total Batches"
+    navigate:
+      report_id: lms
+      sub_tab: data
+      sheet: "Batch Summary"
+
+  - id: total_enrollments
+    label: Enrollments
+    description: Total course enrollments
+    format: number
+    source:
+      type: report_metric
+      report_id: lms-comprehensive
+      sheet: "8. Summary Statistics"
+      metric: "Total Enrollments"
+    navigate:
+      report_id: lms-comprehensive
+      sub_tab: data
+      sheet: "1. Batch Summary"
+
+  - id: total_participants
+    label: Participants
+    description: LMS participants across batches
+    format: number
+    source:
+      type: report_metric
+      report_id: lms-comprehensive
+      sheet: "8. Summary Statistics"
+      metric: "Total Participants"
+    navigate:
+      report_id: lms-comprehensive
+      sub_tab: data
+      sheet: "3. Participant Details"
+
+  - id: attendance_rate
+    label: Avg Attendance
+    description: Average attendance rate across batches
+    format: text
+    source:
+      type: report_metric
+      report_id: lms-comprehensive
+      sheet: "8. Summary Statistics"
+      metric: "Average Attendance Rate"
+    navigate:
+      report_id: lms-comprehensive
+      sub_tab: data
+      sheet: "6. Attendance Summary"
+
+Telios:
+  - id: geojson_records
+    label: GeoJSON Records
+    description: Total mapped GeoJSON features
+    format: number
+    source:
+      type: report_metric
+      report_id: telios-geojson
+      sheet: "8. Summary Statistics"
+      metric: "Total GeoJSON Records"
+    navigate:
+      report_id: telios-geojson
+      sub_tab: data
+      sheet: "1. GeoJSON Overview"
+
+  - id: unique_regions
+    label: Regions
+    description: Unique geographic regions covered
+    format: number
+    source:
+      type: report_metric
+      report_id: telios-geojson
+      sheet: "8. Summary Statistics"
+      metric: "Unique Regions"
+    navigate:
+      report_id: telios-geojson
+      sub_tab: data
+      sheet: "6. Region Summary"
+
+  - id: unique_countries
+    label: Countries
+    description: Countries with Telios data
+    format: number
+    source:
+      type: report_metric
+      report_id: telios-geojson
+      sheet: "8. Summary Statistics"
+      metric: "Unique Countries"
+    navigate:
+      report_id: telios-geojson
+      sub_tab: data
+      sheet: "5. Project Locations"
+
+Language:
+  - id: language_surveys
+    label: Language Surveys
+    description: Completed language survey count
+    format: number
+    source:
+      type: report_metric
+      report_id: language-dashboard
+      sheet: "5. Key Insights"
+      metric_column: Insight
+      metric: "Total Language Surveys"
+    navigate:
+      report_id: language-dashboard
+      sub_tab: data
+      sheet: "1. All Language Surveys"
+
+  - id: survey_responses
+    label: Survey Responses
+    description: Total language survey responses
+    format: number
+    source:
+      type: report_metric
+      report_id: language-dashboard
+      sheet: "5. Key Insights"
+      metric_column: Insight
+      metric: "Total Survey Responses"
+    navigate:
+      report_id: language-dashboard
+      sub_tab: data
+      sheet: "1. All Language Surveys"
+
+  - id: survey_detail
+    label: Survey Records
+    description: Detailed language survey entries
+    format: number
+    source:
+      type: report_row_count
+      report_id: language-survey
+      sheet: "5. Detailed Responses"
+    navigate:
+      report_id: language-survey
+      sub_tab: data
+      sheet: "5. Detailed Responses"

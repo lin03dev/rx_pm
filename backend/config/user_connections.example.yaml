@@ -1,0 +1,4 @@
+# Optional custom connections override or extend config/default_databases.yaml.
+# Copy to user_connections.yaml only if you need extra databases beyond LMS, AG, and Telios.
+
+connections: {}

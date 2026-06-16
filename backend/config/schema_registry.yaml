@@ -1,0 +1,797 @@
+# Database schema reference for AG, LMS, and Telios.
+# Reports MUST only query tables listed under their bound system.
+# Cross-database access is allowed only for entries in cross_db_reports.
+# Report catalogue (module/class/filters) and output templates are defined in report_definitions below.
+
+version: 1
+
+# UI grouping for the report catalogue (module/class/filters/sheets live under report_definitions).
+report_categories:
+  AG:
+    display_name: "AG Reports"
+  LMS:
+    display_name: "LMS Reports"
+  Telios:
+    display_name: "Telios Reports"
+  Language:
+    display_name: "Language Survey Reports"
+  Utility:
+    display_name: "Utility Reports"
+
+systems:
+  AG:
+    connection_names: [AG, AG_Dev]
+    naming: camelCase
+    tables:
+      users:
+        columns: [id, createdAt, updatedAt, name, email, password, role, username, personId]
+      users_to_projects:
+        columns: [userId, projectId, createdAt, updatedAt, role, verses, obsChapters, literatureGenres, assignments, worklogs]
+      projects:
+        columns: [id, createdAt, updatedAt, name, languageId, dialectId, countryId, organizationId, projectType, stage]
+      languages:
+        columns: [id, createdAt, updatedAt, name, isoCode, scriptDirection]
+      dialects:
+        columns: [id, createdAt, updatedAt, languageId, rolvCode, name]
+      countries:
+        columns: [id, createdAt, updatedAt, name, countryCode]
+      person:
+        columns: [id, createdAt, updatedAt, firstName, lastName, phone, email, countryId, rollNumber, enrollmentDate, dateOfJoining, dateOfLeaving, reasonOfLeaving, gender, state, region]
+      language_projects:
+        columns: [id, createdAt, updatedAt, name, languageId, dialectId, countryId]
+      language_project_members:
+        columns: [id, createdAt, updatedAt, userId, languageProjectId, status]
+      language_project_member_roles:
+        columns: [id, createdAt, updatedAt, isPrimary, role, languageProjectMemberId, assignedAt, assignedBy, revokedAt, revokedBy]
+      worklogs:
+        columns: [id, createdAt, updatedAt, projectId, role, userId, startDate, endDate, description, translationSoftware, noWork, stage, bookNo, startChapter, startVerse, endChapter, endVerse, obsStartChapter, obsEndChapter, literatureGenre]
+      bt_projects:
+        columns: [id, createdAt, updatedAt, projectId]
+      bt_projects_books:
+        columns: [id, createdAt, updatedAt, bookNo, bookName, bibleTextProjectId]
+      bt_projects_chapters:
+        columns: [id, createdAt, updatedAt, chapterNo, content, version, bibleTextProjectBookId]
+      bt_projects_chapter_history:
+        columns: [id, createdAt, updatedAt, version, chapterNo, userId, remark, content, bibleTextProjectChapterId]
+      obs_projects:
+        columns: [id, createdAt, updatedAt, projectId]
+      obs_project_chapters:
+        columns: [id, createdAt, updatedAt, chapterNo, name, version, obsProjectId, data]
+      obs_project_chapter_history:
+        columns: [id, createdAt, updatedAt, version, chapterNo, name, userId, remark, obsProjectChapterId, data]
+      literature_projects:
+        columns: [id, createdAt, updatedAt, template, projectId, translationTemplate]
+      literature_project_genres:
+        columns: [id, createdAt, updatedAt, template, genreId, name, content, version, literatureProjectId]
+      literature_project_genres_history:
+        columns: [id, createdAt, updatedAt, template, genreId, name, content, version, userId, remark, literatureProjectGenreId]
+      grammar_phrases_projects:
+        columns: [id, createdAt, updatedAt, template, projectId]
+      grammar_phrases_project_contents:
+        columns: [id, createdAt, updatedAt, content, version, grammarPhrasesProjectId]
+      grammar_pronouns_projects:
+        columns: [id, createdAt, updatedAt, template, projectId]
+      grammar_pronouns_project_contents:
+        columns: [id, createdAt, updatedAt, content, version, grammarPronounsProjectId]
+      grammar_connectives_projects:
+        columns: [id, createdAt, updatedAt, template, projectId]
+      grammar_connectives_project_contents:
+        columns: [id, createdAt, updatedAt, content, version, grammarConnectivesProjectId]
+      text_translation_projects:
+        columns: [id, createdAt, updatedAt, projectId]
+      text_translation_books:
+        columns: [id, createdAt, updatedAt, bookNo, bookName, textTranslationProjectId]
+      text_translation_chapters:
+        columns: [id, createdAt, updatedAt, chapterNo, content, version, textTranslationBookId]
+
+  LMS:
+    connection_names: [LMS, LMS_Dev]
+    naming: snake_case
+    tables:
+      person:
+        columns: [id, email, firstname, lastname, phone, country, country_id, rollnumber, enrollmentdate, date_of_joining, date_of_leaving, reasonofleaving, presentaddresscountry, gender, validationstatus, validationcomment, presentstatus, maritalstatus, state, region]
+      enrollment:
+        columns: [id, batch, student, role]
+      batch:
+        columns: [id, batch, location, start_date, enddate, batch_status_id, country_id, course_id, startdate]
+      course:
+        columns: [id, title, description]
+      country:
+        columns: [id, country]
+      batchstatus:
+        columns: [id, batchstatus]
+      language:
+        columns: [id, personid, languagename, block, district, state, village]
+      user:
+        columns: [id, login, password, personId]
+      assignment:
+        columns: [id, assignment, content, module, archivedat, durationdays]
+      assignmentsubmission:
+        columns: [id, assignment, enrollment, submissionstatus, score, submittedat, comment, file_url]
+      submissionstatus:
+        columns: [id, submissionstatus]
+      module:
+        columns: [id, module, description, course]
+      attendance:
+        columns: [id, ispresent, enrollment, module, session]
+      sessions:
+        columns: [id, date, name, batch, batchmodule]
+      session_attendance:
+        columns: [id, attendance, enrollmentid, sessionid]
+      batchmodule:
+        columns: [id, batchid, moduleid]
+      participant:
+        columns: [id, person, role]
+
+  Telios:
+    connection_names: [Telios, Telios_Dev]
+    naming: snake_case
+    tables:
+      person:
+        columns: [id, firstname, lastname, email, phone, country, country_id, rollnumber, region, presentaddresscountry]
+      participant:
+        columns: [id, person, role]
+      teliosgeojson:
+        columns: [id, countnextlevel, levelid, levelkey, unitid, tellevelkey, country_id, parent_id]
+      teliosgeojsondata:
+        columns: [id, geojson, teliosgeojson_id, levelkey]
+      country:
+        columns: [id, country, country_iso, number_of_levels]
+      language:
+        columns: [id, country, iso_code, language_name, rolv_code, rolv_name, unit_id]
+      survey:
+        columns: [id, survey, survey_type, response_frequency]
+      response:
+        columns: [id, batchid, participant, survey, role, unitid, responsedate, user_id, link_id, link_type, linkcomment]
+      responseanswers:
+        columns: [id, answertext, answeroption, question, response, answer_option_id, optionvalue, optionvalueid, question_id, unitid]
+      question:
+        columns: [id, childorder, section, surveyorder, text, parentquestion, questiontype, surveyid]
+      answeroption:
+        columns: [id, optionvalue, sequence, question]
+      questiontype:
+        columns: [id, questiontype]
+      user:
+        columns: [id, login, password, personid, role_id, keycloak_id]
+
+cross_db_reports:
+  bt-academy-students:
+    primary: LMS
+    enrichments:
+      - system: AG
+        match_keys: [email, roll_number, normalized_name]
+        sources:
+          autographa_id: users.username
+          language_roles: language_project_member_roles
+
+report_definitions:
+  bt-academy-students:
+    version: "1.0"
+    display_name: "BT Academy Student Report"
+    category: LMS
+    standard: true
+    template_id: bt-academy-students
+    module: reports.bt_academy_student_report
+    class: BTAcademyStudentReport
+    description: Standard BT Academy student roster workbook
+    filename_prefix: bt_academy_students
+    sources:
+      primary: LMS
+      tables: [person, enrollment, batch, country, user]
+    filters: [country, role, status, validation_status]
+    output:
+      sheets:
+        student_roster:
+          display_name: "BT Academy Students"
+          role: primary
+          grain: one_row_per_person
+          columns:
+            - key: autographa_id
+              label: "Autographa id"
+              width: 14
+              align: center
+              schema_ref: { system: AG, table: users, column: username }
+              fallbacks:
+                - { system: LMS, table: person, column: rollnumber }
+                - { system: LMS, table: user, column: login }
+            - key: student_name
+              label: "Name of student"
+              width: 28
+              schema_ref: { system: LMS, table: person, columns: [firstname, lastname] }
+            - key: country
+              label: Country
+              width: 18
+              schema_ref: { system: LMS, table: person, column: country }
+            - key: language
+              label: Language
+              width: 24
+              schema_ref: { system: AG, table: languages, column: name }
+            - key: role
+              label: Role
+              width: 14
+              schema_ref: { system: AG, table: language_project_member_roles, column: role }
+            - key: lms_roles
+              label: "LMS roles"
+              width: 18
+              schema_ref: { system: LMS, table: enrollment, column: role }
+            - key: enrollments
+              label: Enrollments
+              width: 12
+              align: center
+              derived: enrollment_count
+            - key: batches
+              label: Batches
+              width: 32
+              schema_ref: { system: LMS, table: batch, column: batch }
+            - key: validation_status
+              label: "Validation Status"
+              width: 18
+              align: center
+              schema_ref: { system: LMS, table: person, column: validationstatus }
+            - key: current_status
+              label: "Current Status"
+              width: 16
+              align: center
+              schema_ref: { system: LMS, table: person, column: presentstatus }
+              derived: status_from_present_validation_leaving
+            - key: remarks
+              label: Remarks
+              width: 42
+              derived: merged_remarks
+            - key: date_of_enrolment
+              label: "Date of enrolment"
+              width: 16
+              align: center
+              schema_ref: { system: LMS, table: person, column: enrollmentdate }
+          conditional_formats:
+            - column: "Validation Status"
+              rules:
+                - { equals: Rejected, fill: "FFC7CE", font: "9C0006" }
+                - { equals: Pending, fill: "FFEB9C", font: "9C6500" }
+                - { equals: Validated, fill: "C6EFCE", font: "006100" }
+            - column: "Current Status"
+              rules:
+                - { equals: Inactive, fill: "FFC7CE", font: "9C0006" }
+                - { equals: Active, fill: "C6EFCE", font: "006100" }
+                - { equals: Pending, fill: "FFEB9C", font: "9C6500" }
+            - column: "Autographa id"
+              rules:
+                - { equals: "Not specified", fill: "FFC7CE", font: "9C0006" }
+
+        enrollment_details:
+          display_name: "Enrollment Records"
+          role: detail
+          grain: one_row_per_enrollment
+          columns:
+            - { key: autographa_id, label: "Autographa id", width: 14, align: center, schema_ref: { system: AG, table: users, column: username } }
+            - { key: student_name, label: "Name of student", width: 28, schema_ref: { system: LMS, table: person, columns: [firstname, lastname] } }
+            - { key: batch, label: Batch, width: 24, schema_ref: { system: LMS, table: batch, column: batch } }
+            - { key: lms_role, label: "LMS role", width: 14, schema_ref: { system: LMS, table: enrollment, column: role } }
+            - { key: validation_status, label: "Validation Status", width: 18, align: center, schema_ref: { system: LMS, table: person, column: validationstatus } }
+            - { key: current_status, label: "Current Status", width: 16, align: center, derived: status_from_present_validation_leaving }
+            - { key: country, label: Country, width: 18, schema_ref: { system: LMS, table: person, column: country } }
+            - { key: enrollment_record_date, label: "Enrollment record date", width: 18, align: center, derived: enrollment_date }
+            - { key: enrollment_id, label: "Enrollment ID", width: 14, align: center, schema_ref: { system: LMS, table: enrollment, column: id } }
+          conditional_formats:
+            - column: "Current Status"
+              rules:
+                - { equals: Inactive, fill: "FFC7CE", font: "9C0006" }
+                - { equals: Active, fill: "C6EFCE", font: "006100" }
+
+        summary_stats:
+          display_name: "Summary Statistics"
+          role: summary
+          layout: key_value
+          metric_column: Metric
+          value_column: Value
+          columns:
+            - { key: metric, label: Metric, width: 42 }
+            - { key: value, label: Value, width: 18, align: center }
+          highlight_metrics:
+            - "Students Inactive"
+            - "Validation Rejected"
+            - "Students Missing Autographa ID"
+
+  user-activity:
+    version: "1.0"
+    display_name: "User Activity Report"
+    category: AG
+    standard: true
+    template_id: user-activity
+    module: reports.user_activity_report
+    class: UserActivityReport
+    description: User activity workbook with project roles and worklog stats
+    sources:
+      primary: AG
+      tables: [users, person, countries, users_to_projects, projects, languages, worklogs]
+    filters: [role, country, has_activity]
+    output:
+      sheets:
+        all_users:
+          display_name: "1 - All Users"
+          role: primary
+          columns:
+            - { key: name, label: "Name of the user", width: 28, schema_ref: { system: AG, table: users, column: name } }
+            - { key: language, label: "Language name", width: 24, schema_ref: { system: AG, table: languages, column: name } }
+            - { key: role, label: "Role (in project)", width: 20, schema_ref: { system: AG, table: users_to_projects, column: role } }
+            - { key: autographa_id, label: "Autographa id", width: 14, align: center, schema_ref: { system: AG, table: users, column: username } }
+            - { key: start_date, label: "Start date in Autographa", width: 18, schema_ref: { system: AG, table: users, column: createdAt } }
+            - { key: last_use, label: "Last use date in Autographa", width: 18, derived: worklog_last_use }
+            - { key: sessions, label: "Work Sessions", width: 14, align: center, derived: worklog_count }
+            - { key: status, label: Status, width: 22, derived: activity_status }
+            - { key: projects, label: "Projects Assigned", width: 32, schema_ref: { system: AG, table: projects, column: name } }
+        active_users:
+          display_name: "2 - Active Users (with work)"
+          role: detail
+          auto_width: true
+        inactive_users:
+          display_name: "3 - Inactive Users (no work)"
+          role: detail
+          auto_width: true
+        role_distribution:
+          display_name: "4 - Role Distribution"
+          role: summary
+          columns:
+            - { key: role, label: Role, width: 20 }
+            - { key: count, label: "User Count", width: 14, align: center }
+        summary_stats:
+          display_name: "5 - Summary Statistics"
+          role: summary
+          layout: key_value
+          metric_column: Metric
+          value_column: Value
+          columns:
+            - { key: metric, label: Metric, width: 42 }
+            - { key: value, label: Value, width: 18, align: center }
+
+  lms-comprehensive:
+    version: "1.0"
+    display_name: "LMS Comprehensive Report"
+    category: LMS
+    standard: true
+    template_id: lms-comprehensive
+    module: reports.lms_comprehensive_report
+    class: LMSComprehensiveReport
+    description: Comprehensive LMS batch workbook
+    sources:
+      primary: LMS
+      tables: [batch, enrollment, person, course, country, module, batchmodule, attendance, assignment, assignmentsubmission, submissionstatus]
+    filters: [batch_id, course_id, country]
+    output:
+      sheets:
+        batch_summary: { display_name: "1. Batch Summary", role: primary, auto_width: true }
+        enrollment_summary: { display_name: "2. Enrollment Summary", role: detail, auto_width: true }
+        participant_details: { display_name: "3. Participant Details", role: detail, auto_width: true }
+        module_completion: { display_name: "4. Module Completion", role: detail, auto_width: true }
+        assignment_status: { display_name: "5. Assignment Status", role: detail, format: assignment_status }
+        attendance_summary: { display_name: "6. Attendance Summary", role: detail, auto_width: true }
+        summary_stats:
+          display_name: "7. Summary Statistics"
+          role: summary
+          layout: key_value
+          metric_column: Metric
+          value_column: Value
+          value_percent_highlight: true
+
+  lms:
+    version: "1.0"
+    display_name: "LMS Summary Report"
+    category: LMS
+    standard: true
+    template_id: lms
+    module: reports.lms_report
+    class: LMSReport
+    description: LMS summary report
+    sources:
+      primary: LMS
+      tables: [batch, enrollment]
+    filters: [course_id, batch_id, country, role]
+    output:
+      sheets:
+        batch_summary: { display_name: "Batch Summary", role: primary, auto_width: true }
+        enrollments: { display_name: Enrollments, role: detail, auto_width: true }
+        attendance: { display_name: Attendance, role: detail, auto_width: true }
+        summary_stats:
+          display_name: "Summary Statistics"
+          role: summary
+          layout: key_value
+          metric_column: Metric
+          value_column: Value
+
+  lms-batch:
+    version: "1.0"
+    display_name: "LMS Batch Detail Report"
+    category: LMS
+    template_id: lms-batch
+    module: reports.batch_detailed_report
+    class: BatchDetailedReport
+    description: Detailed batch workbook (all batches)
+    sources:
+      primary: LMS
+      tables: [batch, enrollment, person, module, batchmodule, attendance, assignment, assignmentsubmission, sessions]
+    filters: [batch_id, batch_name]
+    output:
+      sheets:
+        batch_overview: { display_name: "1. Batch Overview", role: primary, auto_width: true }
+        participants: { display_name: "2. Participants", role: detail, auto_width: true }
+        module_schedule: { display_name: "3. Session Schedule", role: detail, format: session_schedule }
+        attendance_matrix: { display_name: "4. Attendance Matrix", role: attendance_matrix, format: attendance_matrix }
+        attendance_details: { display_name: "5. Attendance Details", role: detail, auto_width: true }
+        attendance_summary: { display_name: "6. Attendance Summary", role: detail, format: attendance_summary }
+        assignment_submissions: { display_name: "7. Assignment Status", role: detail, format: assignment_status }
+        participant_progress: { display_name: "8. Participant Progress", role: detail, format: participant_progress }
+        trainers: { display_name: "9. Trainers", role: detail, auto_width: true }
+        summary_stats:
+          display_name: "10. Summary Statistics"
+          role: summary
+          layout: key_value
+          metric_column: Metric
+          value_column: Value
+
+  batch-detail:
+    version: "1.0"
+    display_name: "Single Batch Detail Report"
+    category: LMS
+    template_id: batch-detail
+    module: reports.batch_detail_report
+    class: BatchDetailReport
+    description: Single batch detail workbook
+    sources:
+      primary: LMS
+      tables: [batch, enrollment, person, module, attendance, assignment, assignmentsubmission, sessions]
+    filters: [batch_id, batch_name]
+    output:
+      sheets:
+        executive_summary: { display_name: "1. Executive Summary", role: primary, auto_width: true }
+        batch_information: { display_name: "2. Batch Information", role: detail, auto_width: true }
+        participant_list: { display_name: "3. Participant List", role: detail, auto_width: true }
+        participant_performance: { display_name: "4. Participant Performance", role: detail, auto_width: true }
+        attendance_details: { display_name: "5. Attendance Details", role: detail, auto_width: true }
+        attendance_summary: { display_name: "6. Attendance Summary", role: detail, format: attendance_summary }
+        module_progress: { display_name: "7. Module Progress", role: detail, auto_width: true }
+        assignment_status: { display_name: "8. Assignment Status", role: detail, format: assignment_status }
+        assignment_grades: { display_name: "9. Assignment Grades", role: detail, auto_width: true }
+        daily_updates: { display_name: "10. Daily Updates", role: detail, auto_width: true }
+        timetable: { display_name: "11. Timetable/Sessions", role: detail, format: session_schedule }
+        trainers_mentors: { display_name: "12. Trainers & Mentors", role: detail, auto_width: true }
+        batch_comparisons: { display_name: "13. Batch Comparisons", role: summary, auto_width: true }
+
+  user:
+    version: "1.0"
+    display_name: "User Report"
+    category: AG
+    template_id: user
+    module: reports.user_report
+    class: UserReport
+    description: User management report
+    sources:
+      primary: AG
+      tables: [users, person, countries]
+    filters: [role, country]
+    output:
+      sheets:
+        user_details: { display_name: "User Details", role: primary, auto_width: true }
+        role_summary: { display_name: "Role Summary", role: summary, auto_width: true }
+
+  worklog:
+    version: "1.0"
+    display_name: "Worklog Report"
+    category: AG
+    template_id: worklog
+    module: reports.worklog_report
+    class: WorklogReport
+    description: Worklog productivity report
+    sources:
+      primary: AG
+      tables: [worklogs, users, projects]
+    filters: [role, stage, software, project_type, country, language]
+    output:
+      sheets:
+        worklog_details: { display_name: "Worklog Details", role: primary, auto_width: true }
+        role_summary: { display_name: "Role Summary", role: summary, auto_width: true }
+        project_summary: { display_name: "Project Type Summary", role: summary, auto_width: true }
+        country_summary: { display_name: "Country Summary", role: summary, auto_width: true }
+        stage_summary: { display_name: "Stage Summary", role: summary, auto_width: true }
+        monthly_summary: { display_name: "Monthly Summary", role: summary, auto_width: true }
+
+  consolidated:
+    version: "1.0"
+    display_name: "Consolidated Project Report"
+    category: AG
+    standard: true
+    template_id: consolidated
+    module: reports.consolidated_report_dynamic
+    class: ConsolidatedReportDynamic
+    description: Consolidated AG project completion
+    sources:
+      primary: AG
+      tables: [projects, users_to_projects, worklogs]
+    filters: [project_type, country, language]
+    output:
+      sheets:
+        project_status: { display_name: "1. Project Status", role: primary, auto_width: true }
+        summary_stats:
+          display_name: "2. Summary Statistics"
+          role: summary
+          layout: key_value
+          metric_column: Metric
+          value_column: Value
+          value_percent_highlight: true
+
+  user-assignments:
+    version: "1.0"
+    display_name: "User Assignment Report"
+    category: AG
+    module: reports.user_assignment_report
+    class: UserAssignmentReport
+    description: User assignments across AG projects
+    sources:
+      primary: AG
+      tables: [users, users_to_projects, projects]
+    filters: [user_id, username, role, country, project_type]
+    output:
+      sheets:
+        user_summary: { display_name: "1. User Summary", role: primary, auto_width: true }
+        detailed_assignments: { display_name: "2. Detailed Assignments", role: detail, auto_width: true }
+        users_no_assignments: { display_name: "3. Users with No Projects", role: detail, auto_width: true }
+        project_type_breakdown: { display_name: "4. Project Type by User", role: summary, auto_width: true }
+        summary_stats:
+          display_name: "5. Summary Statistics"
+          role: summary
+          layout: key_value
+          metric_column: Metric
+          value_column: Value
+
+  individual:
+    version: "1.0"
+    display_name: "Individual Performance Report"
+    category: AG
+    module: reports.individual_performance_report
+    class: IndividualPerformanceReport
+    description: Per-person performance across projects
+    sources:
+      primary: AG
+      tables: [users, users_to_projects, projects, worklogs]
+    filters: [user_id, username, role, country, language]
+    output:
+      sheets:
+        individual_summary: { display_name: "1. Individual Summary", role: primary, auto_width: true }
+        summary_stats:
+          display_name: "2. Summary Statistics"
+          role: summary
+          layout: key_value
+          metric_column: Metric
+          value_column: Value
+
+  bible-completion:
+    version: "1.0"
+    display_name: "Bible Completion Report"
+    category: AG
+    module: reports.bible_project_completion_report
+    class: BibleProjectCompletionReport
+    description: Bible translation progress by verses and chapters
+    sources:
+      primary: AG
+      tables: [bt_projects, bt_projects_books, bt_projects_chapters, users_to_projects, projects]
+    filters: [project_id, user_id, role, country, language]
+    output:
+      sheets:
+        projects_overview: { display_name: "1. All Bible Projects", role: primary, auto_width: true }
+        mtt_assignments: { display_name: "2. MTT Assignments", role: detail, auto_width: true }
+        project_status: { display_name: "3. Assigned vs Completed", role: detail, auto_width: true }
+        summary_stats:
+          display_name: "4. Summary Statistics"
+          role: summary
+          layout: key_value
+          metric_column: Metric
+          value_column: Value
+
+  obs-completion:
+    version: "1.0"
+    display_name: "OBS Completion Report"
+    category: AG
+    module: reports.obs_project_completion_report
+    class: OBSProjectCompletionReport
+    description: Open Bible Stories translation and audio progress
+    sources:
+      primary: AG
+      tables: [obs_projects, obs_project_chapters, users_to_projects, projects]
+    filters: [project_id, user_id, role, country]
+    output:
+      sheets:
+        projects_overview: { display_name: "1. All OBS Projects", role: primary, auto_width: true }
+        mtt_assignments: { display_name: "2. MTT Assignments", role: detail, auto_width: true }
+        project_status: { display_name: "3. Assigned vs Completed", role: detail, auto_width: true }
+        summary_stats:
+          display_name: "4. Summary Statistics"
+          role: summary
+          layout: key_value
+          metric_column: Metric
+          value_column: Value
+
+  literature-completion:
+    version: "1.0"
+    display_name: "Literature Completion Report"
+    category: AG
+    module: reports.literature_project_completion_report
+    class: LiteratureProjectCompletionReport
+    description: Literature project completion
+    sources:
+      primary: AG
+      tables: [literature_projects, literature_project_genres, users_to_projects, projects]
+    filters: [project_id, user_id, country]
+    output:
+      sheets:
+        projects_overview: { display_name: "1 - All Literature Projects", role: primary, auto_width: true }
+        mtt_assignments: { display_name: "2 - MTT Assignments", role: detail, auto_width: true }
+        genre_details: { display_name: "3 - Genre Details (Completed Work)", role: detail, auto_width: true }
+        mtt_performance: { display_name: "4 - MTT Performance (Who Completed What)", role: detail, auto_width: true }
+        summary_stats:
+          display_name: "5 - Summary Statistics"
+          role: summary
+          layout: key_value
+          metric_column: Metric
+          value_column: Value
+
+  literature-genre:
+    version: "1.0"
+    display_name: "Literature Genre Report"
+    category: AG
+    module: reports.literature_genre_report
+    class: LiteratureGenreReport
+    description: Literature genre details
+    sources:
+      primary: AG
+      tables: [literature_projects, literature_project_genres, users_to_projects, projects]
+    filters: [project_id, user_id, country]
+    output:
+      sheets:
+        projects_overview: { display_name: "1 - All Literature Projects", role: primary, auto_width: true }
+        mtt_assignments: { display_name: "2 - MTT Assignments", role: detail, auto_width: true }
+        project_status: { display_name: "3 - Project Status", role: detail, auto_width: true }
+        mtt_performance: { display_name: "4 - MTT Performance", role: detail, auto_width: true }
+        genre_details: { display_name: "5 - Genre Details (1 row per genre)", role: detail, auto_width: true }
+        summary_stats:
+          display_name: "6 - Summary Statistics"
+          role: summary
+          layout: key_value
+          metric_column: Metric
+          value_column: Value
+
+  grammar-completion:
+    version: "1.0"
+    display_name: "Grammar Completion Report"
+    category: AG
+    module: reports.grammar_project_completion_report
+    class: GrammarProjectCompletionReport
+    description: Grammar phrases, pronouns, and connectives progress
+    sources:
+      primary: AG
+      tables: [grammar_phrases_projects, grammar_pronouns_projects, grammar_connectives_projects, users_to_projects, projects]
+    filters: [project_id, user_id, role, country]
+    output:
+      sheets:
+        projects_overview: { display_name: "1 - All Grammar Projects", role: primary, auto_width: true }
+        mtt_assignments: { display_name: "2 - MTT Assignments (Reference)", role: detail, auto_width: true }
+        project_status: { display_name: "3 - Project Status (Completion)", role: detail, auto_width: true }
+        summary_stats:
+          display_name: "4 - Summary Statistics"
+          role: summary
+          layout: key_value
+          metric_column: Metric
+          value_column: Value
+
+  ag-drafting:
+    version: "1.0"
+    display_name: "AG Drafting Monitoring Report"
+    category: AG
+    module: reports.ag_drafting_monitoring_report
+    class: AGDraftingMonitoringReport
+    description: AG drafting monitoring workbook
+    sources:
+      primary: AG
+      tables: [projects, languages, dialects, countries, worklogs]
+    filters: [country, language, dialect, project_type]
+    output:
+      sheets:
+        project_level: { display_name: "1 - Project level (Lang-Dialect-Project)", role: primary, auto_width: true }
+        language_dialect_summary: { display_name: "2 - Language-Dialect Summary", role: summary, auto_width: true }
+
+  telios-geojson:
+    version: "1.0"
+    display_name: "Telios GeoJSON Summary Report"
+    category: Telios
+    module: reports.telios_geojson_report
+    class: TeliosGeoJSONReport
+    description: Telios GeoJSON summary workbook
+    sources:
+      primary: Telios
+      tables: [teliosgeojson, teliosgeojsondata, country, language]
+    filters: [country, levelkey]
+    output:
+      sheets:
+        geojson_overview: { display_name: "1. GeoJSON Overview", role: primary, auto_width: true }
+        level_distribution: { display_name: "2. Level Distribution", role: detail, auto_width: true }
+        country_summary: { display_name: "3. Country Summary", role: summary, auto_width: true }
+        language_summary: { display_name: "4. Language Summary", role: summary, auto_width: true }
+        geojson_data: { display_name: "5. GeoJSON Data", role: detail, auto_width: true }
+        summary_stats:
+          display_name: "6. Summary Statistics"
+          role: summary
+          layout: key_value
+          metric_column: Metric
+          value_column: Value
+
+  telios-geojson-data:
+    version: "1.0"
+    display_name: "Telios GeoJSON Data Export"
+    category: Telios
+    module: reports.telios_geojson_report
+    class: TeliosGeoJSONDataReport
+    description: Telios GeoJSON data export
+    sources:
+      primary: Telios
+      tables: [teliosgeojson, teliosgeojsondata]
+    filters: [country, levelkey]
+    output:
+      sheets:
+        geo_units: { display_name: "1. Geo Units", role: primary, auto_width: true }
+        geojson_payloads: { display_name: "2. GeoJSON Payloads", role: detail, auto_width: true }
+
+  language-survey:
+    version: "1.0"
+    display_name: "Language Survey Report"
+    category: Language
+    module: reports.language_survey_report
+    class: LanguageSurveyReport
+    description: Language survey analysis (Telios survey schema)
+    sources:
+      primary: Telios
+      tables: [survey, response, responseanswers, question, language, country]
+    filters: [batch_id, language, country]
+    output:
+      sheets:
+        survey_overview: { display_name: "1. Survey Overview", role: primary, auto_width: true }
+        participant_summary: { display_name: "2. Participant Summary", role: detail, auto_width: true }
+        question_analysis: { display_name: "3. Question Analysis", role: detail, auto_width: true }
+        language_demographics: { display_name: "4. Language Demographics", role: detail, auto_width: true }
+        detailed_responses: { display_name: "5. Detailed Responses", role: detail, auto_width: true }
+        summary_stats:
+          display_name: "6. Summary Statistics"
+          role: summary
+          layout: key_value
+          metric_column: Metric
+          value_column: Value
+
+  language-dashboard:
+    version: "1.0"
+    display_name: "Language Dashboard"
+    category: Language
+    module: reports.language_dashboard
+    class: LanguageDashboard
+    description: Consolidated language dashboard
+    sources:
+      primary: Telios
+      tables: [survey, response, language, country]
+    filters: [language, country, survey_type]
+    output:
+      sheets:
+        surveys_summary: { display_name: "1. All Language Surveys", role: primary, auto_width: true }
+        background_summary: { display_name: "2. Language Background", role: detail, auto_width: true }
+        usage_summary: { display_name: "3. Language Usage", role: detail, auto_width: true }
+        vitality_summary: { display_name: "4. Language Vitality", role: detail, auto_width: true }
+        key_insights: { display_name: "5. Key Insights", role: summary, auto_width: true }
+
+  custom:
+    version: "1.0"
+    display_name: "Custom SQL Report"
+    category: Utility
+    module: reports.custom_report
+    class: CustomReport
+    description: Execute a custom SQL query
+    filters: []
+    output:
+      sheets:
+        results: { display_name: "Query Results", role: primary, auto_width: true }
+        error: { display_name: Error, role: detail, auto_width: true }
+
