@@ -18,6 +18,55 @@ report_categories:
   Utility:
     display_name: "Utility Reports"
 
+report_column_groups:
+  metric_value:
+    - { key: metric, label: Metric }
+    - { key: value, label: Value }
+  metric_value_wide:
+    - { key: metric, label: Metric, width: 42 }
+    - { key: value, label: Value, width: 18, align: center }
+  project_identity:
+    - { key: project_name, label: "Project Name" }
+    - { key: language, label: Language }
+    - { key: country, label: Country }
+  user_identity:
+    - { key: username, label: Username }
+    - { key: full_name, label: "Full Name" }
+    - { key: email, label: Email }
+  user_identity_raw:
+    - { key: username, label: username }
+    - { key: full_name, label: full_name }
+    - { key: email, label: email }
+  lms_attendance_counts:
+    - { key: total_sessions, label: "Total Sessions" }
+    - { key: present, label: Present }
+    - { key: attendance_pct, label: "Attendance %" }
+  drafting_progress_metrics:
+    - { key: obs_chapters_assigned, label: OBS_Chapters_Assigned }
+    - { key: obs_chapters_translated, label: OBS_Chapters_Translated }
+    - { key: bible_verses_assigned, label: Bible_Verses_Assigned }
+    - { key: bible_verses_completed, label: Bible_Verses_Completed }
+    - { key: literature_total_blocks, label: Literature_Total_Blocks }
+    - { key: literature_filled_blocks, label: Literature_Filled_Blocks }
+    - { key: childrens_lit_total, label: Childrens_Lit_Total }
+    - { key: childrens_lit_filled, label: Childrens_Lit_Filled }
+    - { key: formal_writing_total, label: Formal_Writing_Total }
+    - { key: formal_writing_filled, label: Formal_Writing_Filled }
+    - { key: history_total, label: History_Total }
+    - { key: history_filled, label: History_Filled }
+    - { key: literature_genre_total, label: Literature_Genre_Total }
+    - { key: literature_genre_filled, label: Literature_Genre_Filled }
+    - { key: narrative_total, label: Narrative_Total }
+    - { key: narrative_filled, label: Narrative_Filled }
+    - { key: poetry_total, label: Poetry_Total }
+    - { key: poetry_filled, label: Poetry_Filled }
+    - { key: grammar_pronouns_total, label: Grammar_Pronouns_Total }
+    - { key: grammar_pronouns_completed, label: Grammar_Pronouns_Completed }
+    - { key: grammar_connectives_total, label: Grammar_Connectives_Total }
+    - { key: grammar_connectives_completed, label: Grammar_Connectives_Completed }
+    - { key: grammar_phrases_total, label: Grammar_Phrases_Total }
+    - { key: grammar_phrases_completed, label: Grammar_Phrases_Completed }
+
 systems:
   AG:
     connection_names: [AG, AG_Dev]
@@ -284,9 +333,7 @@ report_definitions:
           layout: key_value
           metric_column: Metric
           value_column: Value
-          columns:
-            - { key: metric, label: Metric, width: 42 }
-            - { key: value, label: Value, width: 18, align: center }
+          column_groups: [metric_value_wide]
           highlight_metrics:
             - "Students Inactive"
             - "Validation Rejected"
@@ -324,10 +371,30 @@ report_definitions:
           display_name: "2 - Active Users (with work)"
           role: detail
           auto_width: true
+          columns:
+            - { key: name, label: "Name of the user" }
+            - { key: language, label: "Language name" }
+            - { key: role, label: "Role (in project)" }
+            - { key: autographa_id, label: "Autographa id" }
+            - { key: start_date, label: "Start date" }
+            - { key: first_use_date, label: "First use date" }
+            - { key: last_use_date, label: "Last use date" }
+            - { key: sessions, label: "Work Sessions" }
+            - { key: projects_assigned, label: "Projects Assigned" }
+            - { key: days_inactive, label: "Days Inactive" }
+            - { key: project_names, label: "Project Names" }
         inactive_users:
           display_name: "3 - Inactive Users (no work)"
           role: detail
           auto_width: true
+          columns:
+            - { key: name, label: "Name of the user" }
+            - { key: language, label: "Language name" }
+            - { key: role, label: "Role (in project)" }
+            - { key: autographa_id, label: "Autographa id" }
+            - { key: start_date, label: "Start date" }
+            - { key: projects_assigned, label: "Projects Assigned" }
+            - { key: project_names, label: "Project Names" }
         role_distribution:
           display_name: "4 - Role Distribution"
           role: summary
@@ -340,9 +407,7 @@ report_definitions:
           layout: key_value
           metric_column: Metric
           value_column: Value
-          columns:
-            - { key: metric, label: Metric, width: 42 }
-            - { key: value, label: Value, width: 18, align: center }
+          column_groups: [metric_value_wide]
 
   lms-comprehensive:
     version: "1.0"
@@ -359,12 +424,87 @@ report_definitions:
     filters: [batch_id, course_id, country]
     output:
       sheets:
-        batch_summary: { display_name: "1. Batch Summary", role: primary, auto_width: true }
-        enrollment_summary: { display_name: "2. Enrollment Summary", role: detail, auto_width: true }
-        participant_details: { display_name: "3. Participant Details", role: detail, auto_width: true }
-        module_completion: { display_name: "4. Module Completion", role: detail, auto_width: true }
-        assignment_status: { display_name: "5. Assignment Status", role: detail, format: assignment_status }
-        attendance_summary: { display_name: "6. Attendance Summary", role: detail, auto_width: true }
+        batch_summary:
+          display_name: "1. Batch Summary"
+          role: primary
+          auto_width: true
+          columns:
+            - { key: batch_id, label: batch_id }
+            - { key: batch_name, label: batch_name }
+            - { key: location, label: location }
+            - { key: start_date, label: start_date }
+            - { key: end_date, label: end_date }
+            - { key: course_name, label: course_name }
+            - { key: country_name, label: country_name }
+            - { key: batch_status_id, label: batch_status_id }
+            - { key: total_enrollments, label: total_enrollments }
+            - { key: mtt_count, label: mtt_count }
+            - { key: trainer_count, label: trainer_count }
+            - { key: admin_count, label: admin_count }
+        enrollment_summary:
+          display_name: "2. Enrollment Summary"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: batch_name, label: batch_name }
+            - { key: location, label: location }
+            - { key: course_name, label: course_name }
+            - { key: role, label: role }
+            - { key: enrollment_count, label: enrollment_count }
+            - { key: unique_participants, label: unique_participants }
+        participant_details:
+          display_name: "3. Participant Details"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: person_id, label: person_id }
+            - { key: firstname, label: firstname }
+            - { key: lastname, label: lastname }
+            - { key: email, label: email }
+            - { key: phone, label: phone }
+            - { key: gender, label: gender }
+            - { key: country, label: country }
+            - { key: state, label: state }
+            - { key: region, label: region }
+            - { key: enrollmentdate, label: enrollmentdate }
+            - { key: date_of_joining, label: date_of_joining }
+            - { key: date_of_leaving, label: date_of_leaving }
+            - { key: batch_name, label: batch_name }
+            - { key: enrollment_role, label: enrollment_role }
+        module_completion:
+          display_name: "4. Module Completion"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: batch_name, label: batch_name }
+            - { key: module_name, label: module_name }
+            - { key: module_description, label: module_description }
+            - { key: total_enrolled, label: total_enrolled }
+            - { key: attendance_records, label: attendance_records }
+            - { key: attended_count, label: attended_count }
+            - { key: attendance_rate, label: attendance_rate }
+        assignment_status:
+          display_name: "5. Assignment Status"
+          role: detail
+          format: assignment_status
+          columns:
+            - { key: batch_name, label: batch_name }
+            - { key: assignment_name, label: assignment_name }
+            - { key: participant_name, label: participant_name }
+            - { key: status_name, label: status_name }
+            - { key: feedback, label: feedback }
+            - { key: file_url, label: file_url }
+        attendance_summary:
+          display_name: "6. Attendance Summary"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: batch_name, label: batch_name }
+            - { key: module_name, label: module_name }
+            - { key: participant_name, label: participant_name }
+            - { key: total_sessions, label: total_sessions }
+            - { key: present_count, label: present_count }
+            - { key: attendance_rate, label: attendance_rate }
         summary_stats:
           display_name: "7. Summary Statistics"
           role: summary
@@ -372,6 +512,7 @@ report_definitions:
           metric_column: Metric
           value_column: Value
           value_percent_highlight: true
+          column_groups: [metric_value]
 
   lms:
     version: "1.0"
@@ -384,19 +525,46 @@ report_definitions:
     description: LMS summary report
     sources:
       primary: LMS
-      tables: [batch, enrollment]
+      tables: [batch, enrollment, attendance, module]
     filters: [course_id, batch_id, country, role]
     output:
       sheets:
-        batch_summary: { display_name: "Batch Summary", role: primary, auto_width: true }
-        enrollments: { display_name: Enrollments, role: detail, auto_width: true }
-        attendance: { display_name: Attendance, role: detail, auto_width: true }
+        batch_summary:
+          display_name: "Batch Summary"
+          role: primary
+          auto_width: true
+          columns:
+            - { key: batch_id, label: batch_id }
+            - { key: batch_name, label: batch_name }
+            - { key: location, label: location }
+            - { key: start_date, label: start_date }
+            - { key: end_date, label: end_date }
+            - { key: total_enrollments, label: total_enrollments }
+        enrollments:
+          display_name: Enrollments
+          role: detail
+          auto_width: true
+          columns:
+            - { key: batch_name, label: batch_name }
+            - { key: role, label: role }
+            - { key: enrollment_count, label: enrollment_count }
+        attendance:
+          display_name: Attendance
+          role: detail
+          auto_width: true
+          columns:
+            - { key: batch_name, label: batch_name }
+            - { key: module_name, label: module_name }
+            - { key: total_records, label: total_records }
+            - { key: present_count, label: present_count }
+            - { key: attendance_rate, label: attendance_rate }
         summary_stats:
           display_name: "Summary Statistics"
           role: summary
           layout: key_value
           metric_column: Metric
           value_column: Value
+          column_groups: [metric_value]
 
   lms-batch:
     version: "1.0"
@@ -412,21 +580,87 @@ report_definitions:
     filters: [batch_id, batch_name]
     output:
       sheets:
-        batch_overview: { display_name: "1. Batch Overview", role: primary, auto_width: true }
-        participants: { display_name: "2. Participants", role: detail, auto_width: true }
-        module_schedule: { display_name: "3. Session Schedule", role: detail, format: session_schedule }
-        attendance_matrix: { display_name: "4. Attendance Matrix", role: attendance_matrix, format: attendance_matrix }
-        attendance_details: { display_name: "5. Attendance Details", role: detail, auto_width: true }
-        attendance_summary: { display_name: "6. Attendance Summary", role: detail, format: attendance_summary }
-        assignment_submissions: { display_name: "7. Assignment Status", role: detail, format: assignment_status }
-        participant_progress: { display_name: "8. Participant Progress", role: detail, format: participant_progress }
-        trainers: { display_name: "9. Trainers", role: detail, auto_width: true }
+        batch_overview:
+          display_name: "1. Batch Overview"
+          role: primary
+          auto_width: true
+          columns:
+            - { key: batch_name, label: "Batch Name" }
+            - { key: course, label: Course }
+            - { key: location, label: Location }
+            - { key: country, label: Country }
+            - { key: start_date, label: "Start Date" }
+            - { key: end_date, label: "End Date" }
+            - { key: status, label: Status }
+        participants:
+          display_name: "2. Participants"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: participant_id, label: participant_id }
+            - { key: full_name, label: full_name }
+            - { key: email, label: email }
+            - { key: gender, label: gender }
+            - { key: role, label: role }
+        module_schedule:
+          display_name: "3. Session Schedule"
+          role: detail
+          format: session_schedule
+          columns:
+            - { key: session_id, label: session_id }
+            - { key: session_name, label: session_name }
+        attendance_matrix:
+          display_name: "4. Attendance Matrix"
+          role: attendance_matrix
+          format: attendance_matrix
+          dynamic_columns: session_names
+        attendance_details:
+          display_name: "5. Attendance Details"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: participant_name, label: participant_name }
+            - { key: session_name, label: session_name }
+            - { key: status, label: status }
+        attendance_summary:
+          display_name: "6. Attendance Summary"
+          role: detail
+          format: attendance_summary
+          columns:
+            - { key: participant_name, label: participant_name }
+            - { key: total_sessions, label: total_sessions }
+            - { key: present_count, label: present_count }
+            - { key: attendance_rate, label: attendance_rate }
+        assignment_submissions:
+          display_name: "7. Assignment Status"
+          role: detail
+          format: assignment_status
+          columns:
+            - { key: participant_name, label: participant_name }
+            - { key: assignment_name, label: assignment_name }
+            - { key: submission_status, label: submission_status }
+            - { key: feedback, label: feedback }
+        participant_progress:
+          display_name: "8. Participant Progress"
+          role: detail
+          format: participant_progress
+          columns:
+            - { key: participant_name, label: participant_name }
+            - { key: sessions_attended, label: sessions_attended }
+            - { key: assignments_submitted, label: assignments_submitted }
+        trainers:
+          display_name: "9. Trainers"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: message, label: Message }
         summary_stats:
           display_name: "10. Summary Statistics"
           role: summary
           layout: key_value
           metric_column: Metric
           value_column: Value
+          column_groups: [metric_value]
 
   batch-detail:
     version: "1.0"
@@ -442,19 +676,146 @@ report_definitions:
     filters: [batch_id, batch_name]
     output:
       sheets:
-        executive_summary: { display_name: "1. Executive Summary", role: primary, auto_width: true }
-        batch_information: { display_name: "2. Batch Information", role: detail, auto_width: true }
-        participant_list: { display_name: "3. Participant List", role: detail, auto_width: true }
-        participant_performance: { display_name: "4. Participant Performance", role: detail, auto_width: true }
-        attendance_details: { display_name: "5. Attendance Details", role: detail, auto_width: true }
-        attendance_summary: { display_name: "6. Attendance Summary", role: detail, format: attendance_summary }
-        module_progress: { display_name: "7. Module Progress", role: detail, auto_width: true }
-        assignment_status: { display_name: "8. Assignment Status", role: detail, format: assignment_status }
-        assignment_grades: { display_name: "9. Assignment Grades", role: detail, auto_width: true }
-        daily_updates: { display_name: "10. Daily Updates", role: detail, auto_width: true }
-        timetable: { display_name: "11. Timetable/Sessions", role: detail, format: session_schedule }
-        trainers_mentors: { display_name: "12. Trainers & Mentors", role: detail, auto_width: true }
-        batch_comparisons: { display_name: "13. Batch Comparisons", role: summary, auto_width: true }
+        executive_summary:
+          display_name: "1. Executive Summary"
+          role: primary
+          auto_width: true
+          columns:
+            - { key: metric, label: metric }
+            - { key: value, label: value }
+        batch_information:
+          display_name: "2. Batch Information"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: batch_name, label: "Batch Name" }
+            - { key: location, label: Location }
+            - { key: start_date, label: "Start Date" }
+            - { key: end_date, label: "End Date" }
+            - { key: duration_days, label: "Duration (Days)" }
+            - { key: course_name, label: "Course Name" }
+            - { key: country, label: Country }
+            - { key: batch_status, label: "Batch Status" }
+            - { key: current_status, label: "Current Status" }
+        participant_list:
+          display_name: "3. Participant List"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: person_id, label: "Person ID" }
+            - { key: first_name, label: "First Name" }
+            - { key: last_name, label: "Last Name" }
+            - { key: email, label: Email }
+            - { key: phone, label: Phone }
+            - { key: gender, label: Gender }
+            - { key: country, label: Country }
+            - { key: state, label: State }
+            - { key: region, label: Region }
+            - { key: enrollment_date, label: "Enrollment Date" }
+            - { key: role, label: Role }
+            - { key: date_of_joining, label: "Date of Joining" }
+            - { key: reason_for_leaving, label: "Reason for Leaving" }
+        participant_performance:
+          display_name: "4. Participant Performance"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: participant_name, label: "Participant Name" }
+            - { key: role, label: Role }
+            - { key: total_sessions, label: "Total Sessions" }
+            - { key: present, label: Present }
+            - { key: attendance_pct, label: "Attendance %" }
+            - { key: assignments_submitted, label: "Assignments Submitted" }
+            - { key: assignments_approved, label: "Assignments Approved" }
+            - { key: approval_rate, label: "Approval Rate" }
+            - { key: average_score, label: "Average Score" }
+        attendance_details:
+          display_name: "5. Attendance Details"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: date, label: Date }
+            - { key: module, label: Module }
+            - { key: participant, label: Participant }
+            - { key: role, label: Role }
+            - { key: status, label: Status }
+        attendance_summary:
+          display_name: "6. Attendance Summary"
+          role: detail
+          format: attendance_summary
+          columns:
+            - { key: participant_name, label: "Participant Name" }
+            - { key: module, label: Module }
+            - { key: total_sessions, label: "Total Sessions" }
+            - { key: present, label: Present }
+            - { key: attendance_pct, label: "Attendance %" }
+        module_progress:
+          display_name: "7. Module Progress"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: module_name, label: "Module Name" }
+            - { key: description, label: Description }
+            - { key: total_enrolled, label: "Total Enrolled" }
+            - { key: attendance_records, label: "Attendance Records" }
+            - { key: attended_count, label: "Attended Count" }
+            - { key: completion_pct, label: "Completion %" }
+        assignment_status:
+          display_name: "8. Assignment Status"
+          role: detail
+          format: assignment_status
+          columns:
+            - { key: assignment_name, label: "Assignment Name" }
+            - { key: participant_name, label: "Participant Name" }
+            - { key: status, label: Status }
+            - { key: submission_date, label: "Submission Date" }
+            - { key: feedback, label: Feedback }
+            - { key: file_url, label: "File URL" }
+        assignment_grades:
+          display_name: "9. Assignment Grades"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: assignment_name, label: "Assignment Name" }
+            - { key: participant_name, label: "Participant Name" }
+            - { key: score, label: Score }
+            - { key: status, label: Status }
+            - { key: feedback, label: Feedback }
+        daily_updates:
+          display_name: "10. Daily Updates"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: date, label: Date }
+            - { key: session, label: Session }
+            - { key: module, label: Module }
+        timetable:
+          display_name: "11. Timetable/Sessions"
+          role: detail
+          format: session_schedule
+          columns:
+            - { key: date, label: Date }
+            - { key: session_name, label: "Session Name" }
+            - { key: module, label: Module }
+        trainers_mentors:
+          display_name: "12. Trainers & Mentors"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: type, label: Type }
+            - { key: name, label: Name }
+            - { key: email, label: Email }
+            - { key: phone, label: Phone }
+        batch_comparisons:
+          display_name: "13. Batch Comparisons"
+          role: summary
+          auto_width: true
+          columns:
+            - { key: batch, label: batch }
+            - { key: start_date, label: start_date }
+            - { key: enrollments, label: enrollments }
+            - { key: attendance_records, label: attendance_records }
+            - { key: submissions, label: submissions }
 
   user:
     version: "1.0"
@@ -470,8 +831,32 @@ report_definitions:
     filters: [role, country]
     output:
       sheets:
-        user_details: { display_name: "User Details", role: primary, auto_width: true }
-        role_summary: { display_name: "Role Summary", role: summary, auto_width: true }
+        user_details:
+          display_name: "User Details"
+          role: primary
+          auto_width: true
+          columns:
+            - { key: user_id, label: user_id }
+            - { key: username, label: username }
+            - { key: email, label: email }
+            - { key: user_role, label: user_role }
+            - { key: display_name, label: display_name }
+            - { key: created_at, label: createdAt }
+            - { key: first_name, label: firstName }
+            - { key: last_name, label: lastName }
+            - { key: full_name, label: full_name }
+            - { key: phone, label: phone }
+            - { key: gender, label: gender }
+            - { key: state, label: state }
+            - { key: country, label: country }
+            - { key: country_code, label: country_code }
+        role_summary:
+          display_name: "Role Summary"
+          role: summary
+          auto_width: true
+          columns:
+            - { key: role, label: Role }
+            - { key: count, label: Count }
 
   worklog:
     version: "1.0"
@@ -487,12 +872,71 @@ report_definitions:
     filters: [role, stage, software, project_type, country, language]
     output:
       sheets:
-        worklog_details: { display_name: "Worklog Details", role: primary, auto_width: true }
-        role_summary: { display_name: "Role Summary", role: summary, auto_width: true }
-        project_summary: { display_name: "Project Type Summary", role: summary, auto_width: true }
-        country_summary: { display_name: "Country Summary", role: summary, auto_width: true }
-        stage_summary: { display_name: "Stage Summary", role: summary, auto_width: true }
-        monthly_summary: { display_name: "Monthly Summary", role: summary, auto_width: true }
+        worklog_details:
+          display_name: "Worklog Details"
+          role: primary
+          auto_width: true
+          columns:
+            - { key: start_date, label: startDate }
+            - { key: end_date, label: endDate }
+            - { key: days_worked, label: days_worked }
+            - { key: country, label: country }
+            - { key: language, label: language }
+            - { key: project_name, label: project_name }
+            - { key: project_type, label: project_type }
+            - { key: role, label: role }
+            - { key: username, label: username }
+            - { key: email, label: email }
+            - { key: stage_name, label: stage_name }
+            - { key: software_name, label: software_name }
+            - { key: work_description, label: work_description }
+            - { key: bible_reference, label: bible_reference }
+            - { key: book_name, label: book_name }
+            - { key: obs_chapters, label: obs_chapters }
+            - { key: genre_name, label: genre_name }
+            - { key: no_work, label: noWork }
+            - { key: description, label: description }
+            - { key: year_month, label: year_month }
+        role_summary:
+          display_name: "Role Summary"
+          role: summary
+          auto_width: true
+          columns:
+            - { key: role, label: Role }
+            - { key: work_sessions, label: "Work Sessions" }
+            - { key: total_days, label: "Total Days" }
+        project_summary:
+          display_name: "Project Type Summary"
+          role: summary
+          auto_width: true
+          columns:
+            - { key: project_type, label: "Project Type" }
+            - { key: work_sessions, label: "Work Sessions" }
+            - { key: total_days, label: "Total Days" }
+        country_summary:
+          display_name: "Country Summary"
+          role: summary
+          auto_width: true
+          columns:
+            - { key: country, label: Country }
+            - { key: work_sessions, label: "Work Sessions" }
+            - { key: total_days, label: "Total Days" }
+        stage_summary:
+          display_name: "Stage Summary"
+          role: summary
+          auto_width: true
+          columns:
+            - { key: stage, label: Stage }
+            - { key: work_sessions, label: "Work Sessions" }
+            - { key: total_days, label: "Total Days" }
+        monthly_summary:
+          display_name: "Monthly Summary"
+          role: summary
+          auto_width: true
+          columns:
+            - { key: year_month, label: "Year-Month" }
+            - { key: work_sessions, label: "Work Sessions" }
+            - { key: total_days, label: "Total Days" }
 
   consolidated:
     version: "1.0"
@@ -509,7 +953,23 @@ report_definitions:
     filters: [project_type, country, language]
     output:
       sheets:
-        project_status: { display_name: "1. Project Status", role: primary, auto_width: true }
+        project_status:
+          display_name: "1. Project Status"
+          role: primary
+          auto_width: true
+          columns:
+            - { key: project_name, label: "Project Name" }
+            - { key: project_type, label: "Project Type" }
+            - { key: language, label: Language }
+            - { key: country, label: Country }
+            - { key: mtts_assigned, label: "MTTs Assigned" }
+            - { key: mtt_names, label: "MTT Names" }
+            - { key: total_items, label: "Total Items" }
+            - { key: completed_items, label: "Completed Items" }
+            - { key: completion_pct, label: "Completion %" }
+            - { key: performance, label: Performance }
+            - { key: status, label: Status }
+            - { key: details, label: Details }
         summary_stats:
           display_name: "2. Summary Statistics"
           role: summary
@@ -517,6 +977,7 @@ report_definitions:
           metric_column: Metric
           value_column: Value
           value_percent_highlight: true
+          column_groups: [metric_value]
 
   user-assignments:
     version: "1.0"
@@ -531,16 +992,61 @@ report_definitions:
     filters: [user_id, username, role, country, project_type]
     output:
       sheets:
-        user_summary: { display_name: "1. User Summary", role: primary, auto_width: true }
-        detailed_assignments: { display_name: "2. Detailed Assignments", role: detail, auto_width: true }
-        users_no_assignments: { display_name: "3. Users with No Projects", role: detail, auto_width: true }
-        project_type_breakdown: { display_name: "4. Project Type by User", role: summary, auto_width: true }
+        user_summary:
+          display_name: "1. User Summary"
+          role: primary
+          auto_width: true
+          columns:
+            - { key: user_id, label: "User ID" }
+            - { group: user_identity }
+            - { key: system_role, label: "System Role" }
+            - { key: gender, label: Gender }
+            - { key: countries, label: Countries }
+            - { key: languages, label: Languages }
+            - { key: number_of_projects, label: "Number of Projects" }
+            - { key: project_types, label: "Project Types" }
+            - { key: project_roles, label: "Project Roles" }
+            - { key: projects, label: Projects }
+        detailed_assignments:
+          display_name: "2. Detailed Assignments"
+          role: detail
+          auto_width: true
+          columns:
+            - { group: user_identity }
+            - { key: system_role, label: "System Role" }
+            - { key: gender, label: Gender }
+            - { key: project_name, label: "Project Name" }
+            - { key: project_type, label: "Project Type" }
+            - { key: project_stage, label: "Project Stage" }
+            - { key: project_role, label: "Project Role" }
+            - { key: country, label: Country }
+            - { key: language, label: Language }
+            - { key: language_code, label: "Language Code" }
+        users_no_assignments:
+          display_name: "3. Users with No Projects"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: user_id, label: user_id }
+            - { group: user_identity_raw }
+            - { key: system_role, label: system_role }
+            - { key: gender, label: gender }
+            - { key: status, label: Status }
+        project_type_breakdown:
+          display_name: "4. Project Type by User"
+          role: summary
+          auto_width: true
+          dynamic_columns: project_type
+          columns:
+            - { key: username, label: username }
+            - { key: full_name, label: full_name }
         summary_stats:
           display_name: "5. Summary Statistics"
           role: summary
           layout: key_value
           metric_column: Metric
           value_column: Value
+          column_groups: [metric_value]
 
   individual:
     version: "1.0"
@@ -555,13 +1061,32 @@ report_definitions:
     filters: [user_id, username, role, country, language]
     output:
       sheets:
-        individual_summary: { display_name: "1. Individual Summary", role: primary, auto_width: true }
+        individual_summary:
+          display_name: "1. Individual Summary"
+          role: primary
+          auto_width: true
+          columns:
+            - { key: user_id, label: "User ID" }
+            - { key: username, label: Username }
+            - { key: full_name, label: "Full Name" }
+            - { key: role, label: Role }
+            - { key: email, label: Email }
+            - { key: phone, label: Phone }
+            - { key: gender, label: Gender }
+            - { key: state, label: State }
+            - { key: country, label: Country }
+            - { key: country_code, label: "Country Code" }
+            - { key: total_projects_assigned, label: "Total Projects Assigned" }
+            - { key: total_verses_assigned, label: "Total Verses Assigned" }
+            - { key: total_obs_chapters_assigned, label: "Total OBS Chapters Assigned" }
+            - { key: total_literature_genres_assigned, label: "Total Literature Genres Assigned" }
         summary_stats:
           display_name: "2. Summary Statistics"
           role: summary
           layout: key_value
           metric_column: Metric
           value_column: Value
+          column_groups: [metric_value]
 
   bible-completion:
     version: "1.0"
@@ -576,15 +1101,55 @@ report_definitions:
     filters: [project_id, user_id, role, country, language]
     output:
       sheets:
-        projects_overview: { display_name: "1. All Bible Projects", role: primary, auto_width: true }
-        mtt_assignments: { display_name: "2. MTT Assignments", role: detail, auto_width: true }
-        project_status: { display_name: "3. Assigned vs Completed", role: detail, auto_width: true }
+        projects_overview:
+          display_name: "1. All Bible Projects"
+          role: primary
+          auto_width: true
+          columns:
+            - { key: project_id, label: project_id }
+            - { key: project_name, label: project_name }
+            - { key: project_type, label: project_type }
+            - { key: language_name, label: language_name }
+            - { key: language_code, label: language_code }
+            - { key: country, label: country }
+            - { key: country_code, label: country_code }
+        mtt_assignments:
+          display_name: "2. MTT Assignments"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: project_id, label: projectId }
+            - { key: project_name, label: project_name }
+            - { key: language_name, label: language_name }
+            - { key: country, label: country }
+            - { key: user_id, label: user_id }
+            - { group: user_identity_raw }
+            - { key: assigned_verses_raw, label: assigned_verses_raw }
+            - { key: verses_assigned_count, label: verses_assigned_count }
+            - { key: project_role, label: project_role }
+        project_status:
+          display_name: "3. Assigned vs Completed"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: project_id, label: "Project ID" }
+            - { group: project_identity }
+            - { key: mtts_assigned, label: "MTTs Assigned" }
+            - { key: mtt_names, label: "MTT Names" }
+            - { key: verses_assigned, label: "Verses Assigned" }
+            - { key: verses_completed, label: "Verses Completed" }
+            - { key: verse_completion_pct, label: "Verse Completion %" }
+            - { key: chapters_assigned, label: "Chapters Assigned" }
+            - { key: chapters_completed, label: "Chapters Completed" }
+            - { key: chapter_completion_pct, label: "Chapter Completion %" }
+            - { key: status, label: Status }
         summary_stats:
           display_name: "4. Summary Statistics"
           role: summary
           layout: key_value
           metric_column: Metric
           value_column: Value
+          column_groups: [metric_value]
 
   obs-completion:
     version: "1.0"
@@ -599,15 +1164,56 @@ report_definitions:
     filters: [project_id, user_id, role, country]
     output:
       sheets:
-        projects_overview: { display_name: "1. All OBS Projects", role: primary, auto_width: true }
-        mtt_assignments: { display_name: "2. MTT Assignments", role: detail, auto_width: true }
-        project_status: { display_name: "3. Assigned vs Completed", role: detail, auto_width: true }
+        projects_overview:
+          display_name: "1. All OBS Projects"
+          role: primary
+          auto_width: true
+          columns:
+            - { key: project_id, label: project_id }
+            - { key: project_name, label: project_name }
+            - { key: language_name, label: language_name }
+            - { key: country, label: country }
+        mtt_assignments:
+          display_name: "2. MTT Assignments"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: project_id, label: projectId }
+            - { key: project_name, label: project_name }
+            - { key: language_name, label: language_name }
+            - { key: country, label: country }
+            - { key: user_id, label: user_id }
+            - { group: user_identity_raw }
+            - { key: assigned_chapters_raw, label: assigned_chapters_raw }
+            - { key: chapters_assigned_count, label: chapters_assigned_count }
+        project_status:
+          display_name: "3. Assigned vs Completed"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: project_id, label: "Project ID" }
+            - { group: project_identity }
+            - { key: mtts_assigned, label: "MTTs Assigned" }
+            - { key: mtt_names, label: "MTT Names" }
+            - { key: chapters_assigned, label: "Chapters Assigned" }
+            - { key: chapters_completed, label: "Chapters Completed" }
+            - { key: chapter_completion_pct, label: "Chapter Completion %" }
+            - { key: paragraphs_assigned, label: "Paragraphs Assigned" }
+            - { key: paragraphs_completed, label: "Paragraphs Completed" }
+            - { key: paragraph_completion_pct, label: "Paragraph Completion %" }
+            - { key: overall_completion_pct, label: "Overall Completion %" }
+            - { key: chapters_with_title_audio, label: "Chapters with Title Audio" }
+            - { key: title_audio_pct, label: "Title Audio %" }
+            - { key: paragraphs_with_audio, label: "Paragraphs with Audio" }
+            - { key: paragraph_audio_pct, label: "Paragraph Audio %" }
+            - { key: status, label: Status }
         summary_stats:
           display_name: "4. Summary Statistics"
           role: summary
           layout: key_value
           metric_column: Metric
           value_column: Value
+          column_groups: [metric_value]
 
   literature-completion:
     version: "1.0"
@@ -622,16 +1228,71 @@ report_definitions:
     filters: [project_id, user_id, country]
     output:
       sheets:
-        projects_overview: { display_name: "1 - All Literature Projects", role: primary, auto_width: true }
-        mtt_assignments: { display_name: "2 - MTT Assignments", role: detail, auto_width: true }
-        genre_details: { display_name: "3 - Genre Details (Completed Work)", role: detail, auto_width: true }
-        mtt_performance: { display_name: "4 - MTT Performance (Who Completed What)", role: detail, auto_width: true }
+        projects_overview:
+          display_name: "1 - All Literature Projects"
+          role: primary
+          auto_width: true
+          columns:
+            - { key: project_id, label: project_id }
+            - { key: project_name, label: project_name }
+            - { key: project_type, label: project_type }
+            - { key: language_name, label: language_name }
+            - { key: language_code, label: language_code }
+            - { key: country, label: country }
+            - { key: country_code, label: country_code }
+        mtt_assignments:
+          display_name: "2 - MTT Assignments"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: project_id, label: projectId }
+            - { key: project_name, label: project_name }
+            - { key: language_name, label: language_name }
+            - { key: country, label: country }
+            - { key: user_id, label: user_id }
+            - { group: user_identity_raw }
+            - { key: assigned_genres_raw, label: assigned_genres_raw }
+            - { key: genres_assigned_count, label: genres_assigned_count }
+            - { key: project_role, label: project_role }
+        genre_details:
+          display_name: "3 - Genre Details (Completed Work)"
+          role: detail
+          auto_width: true
+          columns:
+            - { group: project_identity }
+            - { key: genre, label: Genre }
+            - { key: total_blocks, label: "Total Blocks" }
+            - { key: filled_blocks, label: "Filled Blocks" }
+            - { key: fill_rate_pct, label: "Fill Rate %" }
+            - { key: total_sentences, label: "Total Sentences" }
+            - { key: total_words, label: "Total Words" }
+            - { key: version, label: Version }
+            - { key: completed_by, label: "Completed By" }
+            - { key: last_updated, label: "Last Updated" }
+            - { key: status, label: Status }
+        mtt_performance:
+          display_name: "4 - MTT Performance (Who Completed What)"
+          role: detail
+          auto_width: true
+          columns:
+            - { group: project_identity }
+            - { key: genre, label: Genre }
+            - { key: completed_by, label: "Completed By" }
+            - { key: filled_blocks, label: "Filled Blocks" }
+            - { key: total_blocks, label: "Total Blocks" }
+            - { key: fill_rate_pct, label: "Fill Rate %" }
+            - { key: sentences, label: Sentences }
+            - { key: words, label: Words }
+            - { key: version, label: Version }
+            - { key: last_updated, label: "Last Updated" }
+            - { key: status, label: Status }
         summary_stats:
           display_name: "5 - Summary Statistics"
           role: summary
           layout: key_value
           metric_column: Metric
           value_column: Value
+          column_groups: [metric_value]
 
   literature-genre:
     version: "1.0"
@@ -646,17 +1307,101 @@ report_definitions:
     filters: [project_id, user_id, country]
     output:
       sheets:
-        projects_overview: { display_name: "1 - All Literature Projects", role: primary, auto_width: true }
-        mtt_assignments: { display_name: "2 - MTT Assignments", role: detail, auto_width: true }
-        project_status: { display_name: "3 - Project Status", role: detail, auto_width: true }
-        mtt_performance: { display_name: "4 - MTT Performance", role: detail, auto_width: true }
-        genre_details: { display_name: "5 - Genre Details (1 row per genre)", role: detail, auto_width: true }
+        projects_overview:
+          display_name: "1 - All Literature Projects"
+          role: primary
+          auto_width: true
+          columns:
+            - { key: project_id, label: project_id }
+            - { key: project_name, label: project_name }
+            - { key: project_type, label: project_type }
+            - { key: language_name, label: language_name }
+            - { key: language_code, label: language_code }
+            - { key: country, label: country }
+            - { key: country_code, label: country_code }
+        mtt_assignments:
+          display_name: "2 - MTT Assignments"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: project_id, label: projectId }
+            - { key: project_name, label: project_name }
+            - { key: language_name, label: language_name }
+            - { key: country, label: country }
+            - { key: user_id, label: user_id }
+            - { group: user_identity_raw }
+            - { key: assigned_genres_raw, label: assigned_genres_raw }
+            - { key: genres_assigned_count, label: genres_assigned_count }
+            - { key: project_role, label: project_role }
+        project_status:
+          display_name: "3 - Project Status"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: project_id, label: "Project ID" }
+            - { key: project_name, label: "Project Name" }
+            - { key: project_type, label: "Project Type" }
+            - { key: language, label: Language }
+            - { key: country, label: Country }
+            - { key: mtts_assigned, label: "MTTs Assigned" }
+            - { key: mtt_names, label: "MTT Names" }
+            - { key: has_content, label: "Has Content" }
+            - { key: total_sections, label: "Total Sections" }
+            - { key: sections_completed, label: "Sections Completed" }
+            - { key: section_completion_pct, label: "Section Completion %" }
+            - { key: total_sentences, label: "Total Sentences" }
+            - { key: total_words, label: "Total Words" }
+            - { key: version, label: Version }
+            - { key: completed_by, label: "Completed By" }
+            - { key: status, label: Status }
+        mtt_performance:
+          display_name: "4 - MTT Performance"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: project_id, label: "Project ID" }
+            - { group: project_identity }
+            - { key: mtt_user_id, label: "MTT User ID" }
+            - { key: mtt_username, label: "MTT Username" }
+            - { key: mtt_full_name, label: "MTT Full Name" }
+            - { key: mtt_email, label: "MTT Email" }
+            - { key: genres_assigned, label: "Genres Assigned" }
+            - { key: has_content, label: "Has Content" }
+            - { key: total_sections, label: "Total Sections" }
+            - { key: sections_completed, label: "Sections Completed" }
+            - { key: section_completion_pct, label: "Section Completion %" }
+            - { key: total_sentences, label: "Total Sentences" }
+            - { key: total_words, label: "Total Words" }
+            - { key: status, label: Status }
+        genre_details:
+          display_name: "5 - Genre Details (1 row per genre)"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: project_id, label: "Project ID" }
+            - { key: project_name, label: "Project Name" }
+            - { key: project_type, label: "Project Type" }
+            - { key: language, label: Language }
+            - { key: country, label: Country }
+            - { key: genre_id, label: "Genre ID" }
+            - { key: genre_name, label: "Genre Name" }
+            - { key: total_sections, label: "Total Sections" }
+            - { key: sections_completed, label: "Sections Completed" }
+            - { key: section_completion_pct, label: "Section Completion %" }
+            - { key: total_sentences, label: "Total Sentences" }
+            - { key: total_words, label: "Total Words" }
+            - { key: total_characters, label: "Total Characters" }
+            - { key: version, label: Version }
+            - { key: completed_by, label: "Completed By" }
+            - { key: last_updated, label: "Last Updated" }
+            - { key: status, label: Status }
         summary_stats:
           display_name: "6 - Summary Statistics"
           role: summary
           layout: key_value
           metric_column: Metric
           value_column: Value
+          column_groups: [metric_value]
 
   grammar-completion:
     version: "1.0"
@@ -671,15 +1416,51 @@ report_definitions:
     filters: [project_id, user_id, role, country]
     output:
       sheets:
-        projects_overview: { display_name: "1 - All Grammar Projects", role: primary, auto_width: true }
-        mtt_assignments: { display_name: "2 - MTT Assignments (Reference)", role: detail, auto_width: true }
-        project_status: { display_name: "3 - Project Status (Completion)", role: detail, auto_width: true }
+        projects_overview:
+          display_name: "1 - All Grammar Projects"
+          role: primary
+          auto_width: true
+          columns:
+            - { key: project_id, label: project_id }
+            - { key: project_name, label: project_name }
+            - { key: project_type, label: project_type }
+            - { key: language_name, label: language_name }
+            - { key: country, label: country }
+        mtt_assignments:
+          display_name: "2 - MTT Assignments (Reference)"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: project_name, label: project_name }
+            - { key: project_type, label: project_type }
+            - { key: language_name, label: language_name }
+            - { key: country, label: country }
+            - { key: user_id, label: user_id }
+            - { group: user_identity_raw }
+        project_status:
+          display_name: "3 - Project Status (Completion)"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: project_name, label: "Project Name" }
+            - { key: grammar_type, label: "Grammar Type" }
+            - { key: language, label: Language }
+            - { key: country, label: Country }
+            - { key: mtts_assigned, label: "MTTs Assigned" }
+            - { key: mtt_names, label: "MTT Names" }
+            - { key: total_items, label: "Total Items" }
+            - { key: items_completed, label: "Items Completed" }
+            - { key: completion_pct, label: "Completion %" }
+            - { key: version, label: Version }
+            - { key: performance, label: Performance }
+            - { key: status, label: Status }
         summary_stats:
           display_name: "4 - Summary Statistics"
           role: summary
           layout: key_value
           metric_column: Metric
           value_column: Value
+          column_groups: [metric_value]
 
   ag-drafting:
     version: "1.0"
@@ -694,8 +1475,38 @@ report_definitions:
     filters: [country, language, dialect, project_type]
     output:
       sheets:
-        project_level: { display_name: "1 - Project level (Lang-Dialect-Project)", role: primary, auto_width: true }
-        language_dialect_summary: { display_name: "2 - Language-Dialect Summary", role: summary, auto_width: true }
+        project_level:
+          display_name: "1 - Project level (Lang-Dialect-Project)"
+          role: primary
+          auto_width: true
+          columns:
+            - { key: country, label: Country }
+            - { key: language, label: Language }
+            - { key: dialect, label: Dialect }
+            - { key: rolv_code, label: "ROLV Code" }
+            - { key: lan_iso_code, label: lan_iso_code }
+            - { key: date_of_report, label: "Date of Report" }
+            - { key: project_type, label: "Project Type" }
+            - { key: project_name, label: "Project Name" }
+            - { key: mtt_names, label: "MTT Names" }
+            - { key: project_count, label: "Project Count" }
+            - { key: project_names, label: "Project Names" }
+            - { group: drafting_progress_metrics }
+        language_dialect_summary:
+          display_name: "2 - Language-Dialect Summary"
+          role: summary
+          auto_width: true
+          columns:
+            - { key: country, label: Country }
+            - { key: language, label: Language }
+            - { key: dialect, label: Dialect }
+            - { key: rolv_code, label: "ROLV Code" }
+            - { key: lan_iso_code, label: lan_iso_code }
+            - { key: date_of_report, label: "Date of Report" }
+            - { key: mtt_names, label: "MTT Names" }
+            - { key: project_count, label: "Project Count" }
+            - { key: project_names, label: "Project Names" }
+            - { group: drafting_progress_metrics }
 
   telios-geojson:
     version: "1.0"
@@ -710,17 +1521,58 @@ report_definitions:
     filters: [country, levelkey]
     output:
       sheets:
-        geojson_overview: { display_name: "1. GeoJSON Overview", role: primary, auto_width: true }
-        level_distribution: { display_name: "2. Level Distribution", role: detail, auto_width: true }
-        country_summary: { display_name: "3. Country Summary", role: summary, auto_width: true }
-        language_summary: { display_name: "4. Language Summary", role: summary, auto_width: true }
-        geojson_data: { display_name: "5. GeoJSON Data", role: detail, auto_width: true }
+        geojson_overview:
+          display_name: "1. GeoJSON Overview"
+          role: primary
+          auto_width: true
+          columns:
+            - { key: total_units, label: total_units }
+            - { key: countries_covered, label: countries_covered }
+            - { key: level_keys, label: level_keys }
+            - { key: unit_ids, label: unit_ids }
+        level_distribution:
+          display_name: "2. Level Distribution"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: levelkey, label: levelkey }
+            - { key: tellevelkey, label: tellevelkey }
+            - { key: unit_count, label: unit_count }
+            - { key: country_count, label: country_count }
+        country_summary:
+          display_name: "3. Country Summary"
+          role: summary
+          auto_width: true
+          columns:
+            - { key: country, label: country }
+            - { key: unit_count, label: unit_count }
+            - { key: level_keys, label: level_keys }
+        language_summary:
+          display_name: "4. Language Summary"
+          role: summary
+          auto_width: true
+          columns:
+            - { key: language_name, label: language_name }
+            - { key: rolv_code, label: rolv_code }
+            - { key: rolv_name, label: rolv_name }
+            - { key: iso_code, label: iso_code }
+            - { key: country, label: country }
+        geojson_data:
+          display_name: "5. GeoJSON Data"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: id, label: id }
+            - { key: teliosgeojson_id, label: teliosgeojson_id }
+            - { key: levelkey, label: levelkey }
+            - { key: geojson_preview, label: geojson_preview }
         summary_stats:
           display_name: "6. Summary Statistics"
           role: summary
           layout: key_value
           metric_column: Metric
           value_column: Value
+          column_groups: [metric_value]
 
   telios-geojson-data:
     version: "1.0"
@@ -735,8 +1587,28 @@ report_definitions:
     filters: [country, levelkey]
     output:
       sheets:
-        geo_units: { display_name: "1. Geo Units", role: primary, auto_width: true }
-        geojson_payloads: { display_name: "2. GeoJSON Payloads", role: detail, auto_width: true }
+        geo_units:
+          display_name: "1. Geo Units"
+          role: primary
+          auto_width: true
+          columns:
+            - { key: id, label: id }
+            - { key: levelid, label: levelid }
+            - { key: levelkey, label: levelkey }
+            - { key: unitid, label: unitid }
+            - { key: tellevelkey, label: tellevelkey }
+            - { key: countnextlevel, label: countnextlevel }
+            - { key: parent_id, label: parent_id }
+            - { key: country, label: country }
+        geojson_payloads:
+          display_name: "2. GeoJSON Payloads"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: id, label: id }
+            - { key: teliosgeojson_id, label: teliosgeojson_id }
+            - { key: levelkey, label: levelkey }
+            - { key: geojson, label: geojson }
 
   language-survey:
     version: "1.0"
@@ -751,17 +1623,63 @@ report_definitions:
     filters: [batch_id, language, country]
     output:
       sheets:
-        survey_overview: { display_name: "1. Survey Overview", role: primary, auto_width: true }
-        participant_summary: { display_name: "2. Participant Summary", role: detail, auto_width: true }
-        question_analysis: { display_name: "3. Question Analysis", role: detail, auto_width: true }
-        language_demographics: { display_name: "4. Language Demographics", role: detail, auto_width: true }
-        detailed_responses: { display_name: "5. Detailed Responses", role: detail, auto_width: true }
+        survey_overview:
+          display_name: "1. Survey Overview"
+          role: primary
+          auto_width: true
+          columns:
+            - { key: survey_name, label: survey_name }
+            - { key: survey_type, label: survey_type }
+            - { key: total_responses, label: total_responses }
+            - { key: unique_respondents, label: unique_respondents }
+            - { key: batches_represented, label: batches_represented }
+        participant_summary:
+          display_name: "2. Participant Summary"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: participant_name, label: participant_name }
+            - { key: role, label: role }
+            - { key: country, label: country }
+            - { key: unitid, label: unitid }
+        question_analysis:
+          display_name: "3. Question Analysis"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: question, label: question }
+            - { key: questiontype, label: questiontype }
+            - { key: response_count, label: response_count }
+            - { key: respondent_count, label: respondent_count }
+            - { key: answer, label: answer }
+            - { key: answer_count, label: answer_count }
+        language_demographics:
+          display_name: "4. Language Demographics"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: question, label: question }
+            - { key: response, label: response }
+            - { key: count, label: count }
+        detailed_responses:
+          display_name: "5. Detailed Responses"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: participant_name, label: participant_name }
+            - { key: role, label: role }
+            - { key: batch_reference, label: batch_reference }
+            - { key: question, label: question }
+            - { key: questiontype, label: questiontype }
+            - { key: selected_option, label: selected_option }
+            - { key: free_text_answer, label: free_text_answer }
         summary_stats:
           display_name: "6. Summary Statistics"
           role: summary
           layout: key_value
           metric_column: Metric
           value_column: Value
+          column_groups: [metric_value]
 
   language-dashboard:
     version: "1.0"
@@ -776,11 +1694,45 @@ report_definitions:
     filters: [language, country, survey_type]
     output:
       sheets:
-        surveys_summary: { display_name: "1. All Language Surveys", role: primary, auto_width: true }
-        background_summary: { display_name: "2. Language Background", role: detail, auto_width: true }
-        usage_summary: { display_name: "3. Language Usage", role: detail, auto_width: true }
-        vitality_summary: { display_name: "4. Language Vitality", role: detail, auto_width: true }
-        key_insights: { display_name: "5. Key Insights", role: summary, auto_width: true }
+        surveys_summary:
+          display_name: "1. All Language Surveys"
+          role: primary
+          auto_width: true
+          columns:
+            - { key: id, label: id }
+            - { key: survey_name, label: survey_name }
+            - { key: survey_type, label: survey_type }
+            - { key: total_responses, label: total_responses }
+            - { key: respondents, label: respondents }
+            - { key: batches, label: batches }
+        background_summary:
+          display_name: "2. Language Background"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: language, label: language }
+            - { key: count, label: count }
+        usage_summary:
+          display_name: "3. Language Usage"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: usage_context, label: usage_context }
+            - { key: count, label: count }
+        vitality_summary:
+          display_name: "4. Language Vitality"
+          role: detail
+          auto_width: true
+          columns:
+            - { key: vitality_indicator, label: vitality_indicator }
+            - { key: count, label: count }
+        key_insights:
+          display_name: "5. Key Insights"
+          role: summary
+          auto_width: true
+          columns:
+            - { key: insight, label: Insight }
+            - { key: value, label: Value }
 
   custom:
     version: "1.0"
@@ -792,6 +1744,14 @@ report_definitions:
     filters: []
     output:
       sheets:
-        results: { display_name: "Query Results", role: primary, auto_width: true }
-        error: { display_name: Error, role: detail, auto_width: true }
-
+        results:
+          display_name: "Query Results"
+          role: primary
+          auto_width: true
+          dynamic_columns: custom_sql
+        error:
+          display_name: Error
+          role: detail
+          auto_width: true
+          columns:
+            - { key: error, label: Error }

@@ -28,6 +28,8 @@ backend/artifacts/
 *.xlsx
 *.csv
 *.json
+!frontend/package.json
+!frontend/package-lock.json
 *.log
 
 # Frontend

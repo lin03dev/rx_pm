@@ -7,7 +7,7 @@
 
 ### Start the backend
 
-From the repo root:
+From the repo root on Windows PowerShell:
 
 ```powershell
 cd D:\git-projects\rx_pm
@@ -15,7 +15,15 @@ cd D:\git-projects\rx_pm
 .\venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Or from inside `backend/`:
+From the repo root on Linux / WSL / Git Bash:
+
+```bash
+cd ~/workspace/git-projects/rx_pm
+python -m pip install -r backend/requirements.txt
+python -m uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Or, after installing the requirements, from inside `backend/`:
 
 ```powershell
 cd D:\git-projects\rx_pm\backend

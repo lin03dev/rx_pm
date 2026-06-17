@@ -90,8 +90,30 @@ class LMSReport(BaseReport):
         except Exception as e:
             print(f"⚠️ Enrollment query: {e}")
             results['enrollments'] = pd.DataFrame({'Error': [str(e)]})
+
+        # 3. Attendance summary
+        try:
+            attendance_query = """
+            SELECT
+                b.batch as batch_name,
+                m.module as module_name,
+                COUNT(a.id) as total_records,
+                SUM(CASE WHEN a.ispresent = true THEN 1 ELSE 0 END) as present_count,
+                ROUND(100.0 * SUM(CASE WHEN a.ispresent = true THEN 1 ELSE 0 END) / NULLIF(COUNT(a.id), 0), 1) as attendance_rate
+            FROM attendance a
+            JOIN enrollment e ON a.enrollment = e.id
+            JOIN batch b ON e.batch = b.id
+            LEFT JOIN module m ON a.module = m.id
+            GROUP BY b.batch, m.module
+            ORDER BY b.batch, m.module
+            """
+            results['attendance'] = self.schema_query(attendance_query, ["attendance", "enrollment", "batch", "module"])
+            print(f"✅ Attendance: {len(results['attendance'])} rows")
+        except Exception as e:
+            print(f"⚠️ Attendance query: {e}")
+            results['attendance'] = pd.DataFrame({'Error': [str(e)]})
         
-        # 3. Summary Statistics
+        # 4. Summary Statistics
         summary_data = []
         if not results['batch_summary'].empty and 'Error' not in results['batch_summary'].columns:
             summary_data.append({'Metric': 'Total Batches', 'Value': len(results['batch_summary'])})
@@ -99,6 +121,9 @@ class LMSReport(BaseReport):
         
         if not results['enrollments'].empty and 'Error' not in results['enrollments'].columns:
             summary_data.append({'Metric': 'Unique Roles', 'Value': results['enrollments']['role'].nunique() if 'role' in results['enrollments'].columns else 0})
+
+        if not results['attendance'].empty and 'Error' not in results['attendance'].columns:
+            summary_data.append({'Metric': 'Attendance Records', 'Value': results['attendance']['total_records'].sum() if 'total_records' in results['attendance'].columns else 0})
         
         results['summary_stats'] = pd.DataFrame(summary_data) if summary_data else pd.DataFrame({'Message': ['No summary data available']})
         

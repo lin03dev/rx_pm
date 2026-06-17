@@ -47,6 +47,14 @@ def get_report_categories() -> Dict[str, Any]:
     return merged
 
 
+def get_column_groups() -> Dict[str, List[Dict[str, Any]]]:
+    groups = load_schema_registry().get("report_column_groups") or {}
+    return {
+        str(group_id): list(columns or [])
+        for group_id, columns in groups.items()
+    }
+
+
 def get_report_definition(report_id: str) -> Optional[Dict[str, Any]]:
     definition = get_report_definitions().get(report_id)
     if not definition:
@@ -168,13 +176,31 @@ def get_sheet_definition(report_id: str, sheet_key: str) -> Optional[Dict[str, A
     return ((definition.get("output") or {}).get("sheets") or {}).get(sheet_key)
 
 
+def resolve_sheet_columns(sheet: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Expand shared column groups plus local columns into one ordered list."""
+    groups = get_column_groups()
+    columns: List[Dict[str, Any]] = []
+
+    for group_id in sheet.get("column_groups") or []:
+        for col in groups.get(str(group_id), []):
+            columns.append(dict(col))
+
+    for col in sheet.get("columns") or []:
+        group_id = col.get("group") if isinstance(col, dict) else None
+        if group_id:
+            columns.extend(dict(group_col) for group_col in groups.get(str(group_id), []))
+            continue
+        columns.append(dict(col))
+    return columns
+
+
 def get_sheet_column_labels(report_id: str, sheet_key: str) -> List[str]:
     sheet = get_sheet_definition(report_id, sheet_key)
     if not sheet:
         return []
     return [
         str(col.get("label"))
-        for col in (sheet.get("columns") or [])
+        for col in resolve_sheet_columns(sheet)
         if col.get("label")
     ]
 
@@ -204,10 +230,10 @@ def build_output_template(report_id: str) -> Optional[Dict[str, Any]]:
         sheet_template: Dict[str, Any] = {
             key: value
             for key, value in sheet_def.items()
-            if key not in {"columns"}
+            if key not in {"columns", "column_groups"}
         }
         columns: List[Dict[str, Any]] = []
-        for col in sheet_def.get("columns") or []:
+        for col in resolve_sheet_columns(sheet_def):
             entry = {"name": col.get("label") or col.get("key")}
             if col.get("width") is not None:
                 entry["width"] = col["width"]
@@ -258,7 +284,15 @@ def validate_schema_refs(report_id: str) -> List[str]:
 
     output = definition.get("output") or {}
     for sheet_key, sheet_def in (output.get("sheets") or {}).items():
+        for group_id in sheet_def.get("column_groups") or []:
+            if str(group_id) not in get_column_groups():
+                errors.append(f"{report_id}.{sheet_key}: unknown column group '{group_id}'")
         for col in sheet_def.get("columns") or []:
+            group_id = col.get("group") if isinstance(col, dict) else None
+            if group_id and str(group_id) not in get_column_groups():
+                errors.append(f"{report_id}.{sheet_key}: unknown inline column group '{group_id}'")
+
+        for col in resolve_sheet_columns(sheet_def):
             label = col.get("label") or col.get("key") or "?"
             schema_ref = col.get("schema_ref") or {}
             system = schema_ref.get("system")
