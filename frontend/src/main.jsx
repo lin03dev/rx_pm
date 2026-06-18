@@ -4,6 +4,7 @@ import {
   Activity,
   Database,
   Download,
+  LayoutDashboard,
   Play,
   RefreshCw,
   Sparkles,
@@ -19,6 +20,7 @@ import {
   updateDatabaseSelection,
 } from './api';
 import ConnectionsPanel from './ConnectionsPanel';
+import AgOverviewPanel from './AgOverviewPanel';
 import { loadDashboardPrefs, rememberProjectSelection, rememberReportSelection } from './sessionPrefs';
 import './styles.css';
 
@@ -31,6 +33,7 @@ const PROJECT_LABELS = {
   Utility: 'Utility',
 };
 const SUB_TABS = [
+  { id: 'overview', label: 'Overview', icon: LayoutDashboard, projects: ['AG'] },
   { id: 'data', label: 'Data', icon: Table2 },
   { id: 'generate', label: 'Generate', icon: Play },
   { id: 'history', label: 'History', icon: Activity },
@@ -80,6 +83,10 @@ function pickDatabaseForProject(databases, activeNames, project, preferredName =
   if (preferredName && scoped.some((item) => item.name === preferredName)) {
     return preferredName;
   }
+  const devDb = scoped.find(
+    (item) => item.name.includes('_Dev') || item.environment === 'development',
+  );
+  if (devDb) return devDb.name;
   return scoped[0].name;
 }
 
@@ -390,6 +397,10 @@ function App() {
   }, [groupedReports]);
 
   const projectReports = groupedReports[project] || [];
+  const visibleSubTabs = useMemo(
+    () => SUB_TABS.filter((item) => !item.projects || item.projects.includes(project)),
+    [project],
+  );
   const selectedReport = reports.find((report) => report.id === reportId) || projectReports[0];
   const activeProjectDbList = useMemo(
     () => activeProjectDatabases(databases, activeDatabases, project),
@@ -425,6 +436,12 @@ function App() {
       return defaultProjectDatabase || activeProjectDbList[0].name;
     });
   }, [activeProjectDbList, defaultProjectDatabase]);
+
+  useEffect(() => {
+    if (!visibleSubTabs.some((item) => item.id === subTab)) {
+      setSubTab(visibleSubTabs[0]?.id || 'data');
+    }
+  }, [project, visibleSubTabs, subTab]);
 
   useEffect(() => {
     if (projectReports.length && !projectReports.some((report) => report.id === reportId)) {
@@ -904,7 +921,7 @@ function App() {
           </header>
 
           <nav className="sub-tabs" aria-label="Report sections">
-            {SUB_TABS.map((item) => {
+            {visibleSubTabs.map((item) => {
               const Icon = item.icon;
               return (
                 <button
@@ -919,6 +936,13 @@ function App() {
               );
             })}
           </nav>
+
+          {subTab === 'overview' && project === 'AG' ? (
+            <AgOverviewPanel
+              database={previewSourceName}
+              setError={setError}
+            />
+          ) : null}
 
           {subTab === 'data' ? (
             <div className="surface">

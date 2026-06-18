@@ -52,7 +52,7 @@ def list_database_connections() -> Dict[str, Any]:
         active_names = all_names
         save_active_database_names(active_names)
 
-    primary = load_primary_database(active_names[0] if active_names else None)
+    primary = load_primary_database(active_names[0] if active_names else None, active_names)
     selected_by_project = prune_selected_by_project(active_names)
     databases = [_connection_payload(manager.get_config(name), active_names) for name in all_names if manager.get_config(name)]
 
@@ -184,7 +184,7 @@ def delete_database_connection(name: str) -> Dict[str, Any]:
     if not active_names:
         active_names = DatabaseConfigManager().list_databases()[:1]
     save_active_database_names(active_names)
-    primary = load_primary_database(active_names[0] if active_names else None)
+    primary = load_primary_database(active_names[0] if active_names else None, active_names)
     if primary == name:
         save_primary_database(active_names[0] if active_names else None)
     return {"deleted": name, "active": active_names}

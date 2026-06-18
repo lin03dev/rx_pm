@@ -17,8 +17,11 @@ ACTIVE_DATABASES_FILE = CONFIG_DIR / "active_databases.yaml"
 def _read_yaml(path: Path) -> Dict[str, Any]:
     if not path.exists():
         return {}
-    with path.open("r", encoding="utf-8") as handle:
-        return yaml.safe_load(handle) or {}
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            return yaml.safe_load(handle) or {}
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Invalid YAML in {path.name}: {exc}") from exc
 
 
 def _write_yaml(path: Path, payload: Dict[str, Any]) -> None:
@@ -64,7 +67,11 @@ def load_active_database_names(default_names: Optional[List[str]] = None) -> Lis
         return [str(item) for item in active]
 
     default_list = list(default_names or [])
-    preferred = ["LMS", "AG", "Telios"]
+    dev_names = [name for name in default_list if "_Dev" in name or name.lower().endswith("_dev")]
+    if dev_names:
+        return dev_names
+
+    preferred = ["LMS_Dev", "AG_Dev", "Telios_Dev", "LMS", "AG", "Telios"]
     preferred_active = [name for name in preferred if name in default_list]
     if preferred_active:
         return preferred_active
@@ -83,10 +90,25 @@ def save_active_database_names(active: List[str]) -> List[str]:
     return cleaned
 
 
-def load_primary_database(default_name: Optional[str] = None) -> Optional[str]:
+def load_primary_database(
+    default_name: Optional[str] = None,
+    active_names: Optional[List[str]] = None,
+) -> Optional[str]:
     data = _read_yaml(ACTIVE_DATABASES_FILE)
     primary = data.get("primary")
-    return str(primary) if primary else default_name
+    if primary:
+        return str(primary)
+
+    candidates = list(active_names or [])
+    dev_match = next(
+        (name for name in candidates if "_Dev" in name or name.lower().endswith("_dev")),
+        None,
+    )
+    if dev_match:
+        return dev_match
+    if candidates:
+        return candidates[0]
+    return default_name
 
 
 def load_selected_by_project() -> Dict[str, str]:

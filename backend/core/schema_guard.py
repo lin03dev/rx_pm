@@ -125,12 +125,16 @@ class SchemaGuard:
                 query = """
                 SELECT column_name
                 FROM information_schema.columns
-                WHERE table_schema = 'public' AND table_name = %(table_name)s
+                WHERE table_schema = 'public' AND lower(table_name) = lower(%s)
                 """
-                df = self.db_manager.execute_query(query, {"table_name": table}, db_name=self.db_name)
-                self._column_cache[table] = (
-                    [str(name).lower() for name in df["column_name"].tolist()] if not df.empty else []
-                )
+                try:
+                    conn = self.db_manager._get_connection(self.db_name)
+                    with conn.cursor() as cursor:
+                        cursor.execute(query, (table,))
+                        rows = cursor.fetchall()
+                    self._column_cache[table] = [str(row[0]).lower() for row in rows]
+                except Exception:
+                    self._column_cache[table] = []
         return self._column_cache[table]
 
     @staticmethod

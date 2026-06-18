@@ -76,6 +76,23 @@ class DatabaseManager:
                     result.add(verse_id)
         return result
     
+    def _read_sql(self, query: str, params: Optional[Any] = None, db_name: Optional[str] = None) -> pd.DataFrame:
+        """Run read_sql_query with pandas SQLAlchemy warnings suppressed."""
+        use_db = db_name or self.current_db
+        if not use_db:
+            raise ValueError("No database specified.")
+
+        conn = self._get_connection(use_db)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=".*SQLAlchemy connectable.*",
+                category=UserWarning,
+            )
+            if params is not None:
+                return pd.read_sql_query(query, conn, params=params)
+            return pd.read_sql_query(query, conn)
+
     def execute_query(self, query: str, params: Optional[tuple] = None, 
                       db_name: Optional[str] = None) -> pd.DataFrame:
         """Execute SQL query and return results as DataFrame"""
@@ -83,21 +100,16 @@ class DatabaseManager:
         if not use_db:
             raise ValueError("No database specified.")
         
-        conn = self._get_connection(use_db)
         try:
-            if params:
-                df = pd.read_sql_query(query, conn, params=params)
-            else:
-                df = pd.read_sql_query(query, conn)
-            return df
+            return self._read_sql(query, params, db_name=use_db)
         except Exception as e:
-            # Rollback any failed transaction
-            try:
-                conn.rollback()
-            except:
-                pass
+            conn = self.connections.get(use_db)
+            if conn is not None:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
             logger.error(f"Query execution error: {e}")
-            # Return empty DataFrame instead of failing
             return pd.DataFrame()
     
     def execute_update(self, query: str, params: Optional[tuple] = None,
@@ -157,16 +169,23 @@ class DatabaseManager:
         use_db = db_name or self.current_db
         if not use_db:
             return False
-        
-        query = f"""
+
+        query = """
         SELECT EXISTS (
-            SELECT 1 FROM information_schema.tables 
-            WHERE table_schema = 'public' 
-            AND table_name = '{table_name}'
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = 'public'
+            AND lower(table_name) = lower(%s)
         )
         """
-        df = self.execute_query(query, db_name=use_db)
-        return df.iloc[0, 0] if not df.empty else False
+        try:
+            conn = self._get_connection(use_db)
+            with conn.cursor() as cursor:
+                cursor.execute(query, (table_name,))
+                row = cursor.fetchone()
+                return bool(row[0]) if row else False
+        except Exception as exc:
+            logger.warning("table_exists failed for %s on %s: %s", table_name, use_db, exc)
+            return False
     
     def reset_connection(self, db_name: Optional[str] = None):
         """Reset connection to clear any transaction errors"""

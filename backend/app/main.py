@@ -15,6 +15,7 @@ for path in (BACKEND_DIR, ROOT_DIR):
 
 from .schemas import (
     ActiveDatabasesRequest,
+    AgOverviewResponse,
     DashboardInsightsResponse,
     DatabaseConnectionRequest,
     DatabaseConnectionsResponse,
@@ -27,6 +28,7 @@ from .schemas import (
     PreviewReportResponse,
 )
 from .dashboard_service import get_dashboard_insights
+from .ag_overview_service import get_ag_overview
 from .database_service import (
     create_database_connection,
     delete_database_connection,
@@ -130,6 +132,34 @@ def dashboard_insights(project: str, database: str, refresh: bool = False):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@app.get("/api/dashboard/ag-overview", response_model=AgOverviewResponse)
+def ag_overview_dashboard(
+    database: str,
+    country: str | None = None,
+    language: str | None = None,
+    project_type: str | None = None,
+    dialect: str | None = None,
+    limit: int = 1000,
+    refresh: bool = False,
+):
+    try:
+        return AgOverviewResponse(**get_ag_overview(
+            database,
+            country=country,
+            language=language,
+            project_type=project_type,
+            dialect=dialect,
+            limit=min(max(limit, 1), 5000),
+            refresh=refresh,
+        ))
+    except SchemaViolationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @app.post("/api/reports/preview", response_model=PreviewReportResponse)
 def preview(request: PreviewReportRequest):
     try:
@@ -141,7 +171,7 @@ def preview(request: PreviewReportRequest):
             limit=request.limit,
         )
     except SchemaViolationError as exc:
-        raise ValueError(str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -161,7 +191,7 @@ def generate(request: GenerateReportRequest):
             filters=request.filters,
         )
     except SchemaViolationError as exc:
-        raise ValueError(str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:

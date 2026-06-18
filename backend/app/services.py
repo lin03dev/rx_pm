@@ -129,7 +129,21 @@ def preview_report_data(
         if filters:
             report.apply_filters(filters)
 
-        data = report.generate()
+        try:
+            data = report.generate()
+        except SchemaViolationError as exc:
+            sheets = {"Error": _sheet_payload(pd.DataFrame({"Error": [str(exc)]}), limit)}
+            results[db_name] = sheets
+            if not primary_sheets:
+                primary_sheets = sheets
+            continue
+        except Exception as exc:
+            sheets = {"Error": _sheet_payload(pd.DataFrame({"Error": [str(exc)]}), limit)}
+            results[db_name] = sheets
+            if not primary_sheets:
+                primary_sheets = sheets
+            continue
+
         sheet_names = report.get_sheet_names()
         sheets: Dict[str, Any] = {}
 

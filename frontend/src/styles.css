@@ -1180,3 +1180,34 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+.ag-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.overview-summary {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.overview-filters {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.overview-tabs {
+  margin-top: 4px;
+}
+
+.overview-note,
+.overview-updated {
+  color: #5c6f82;
+  font-size: 13px;
+  margin: 0;
+}
+
+.overview-updated {
+  text-align: right;
+}

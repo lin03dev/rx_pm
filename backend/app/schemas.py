@@ -124,3 +124,32 @@ class DashboardInsightsResponse(BaseModel):
     metrics: List[DashboardInsightMetric]
     updated_at: str
     cached: bool = False
+
+
+class AgOverviewSummary(BaseModel):
+    countries: int = 0
+    languages: int = 0
+    dialects: int = 0
+    projects: int = 0
+    assignments: int = 0
+    users_assigned: int = 0
+    assigned_users_total: int = 0
+
+
+class AgOverviewLimits(BaseModel):
+    projects: int = 0
+    assignments: int = 0
+    projects_total: int = 0
+    assignments_total: int = 0
+
+
+class AgOverviewResponse(BaseModel):
+    database: str
+    summary: AgOverviewSummary
+    projects: List[Dict[str, Any]] = Field(default_factory=list)
+    assignments: List[Dict[str, Any]] = Field(default_factory=list)
+    filter_options: Dict[str, List[str]] = Field(default_factory=dict)
+    filters_applied: Dict[str, Optional[str]] = Field(default_factory=dict)
+    limits: AgOverviewLimits = Field(default_factory=AgOverviewLimits)
+    updated_at: str
+    cached: bool = False

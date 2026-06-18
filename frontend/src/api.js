@@ -70,6 +70,27 @@ export function fetchDashboardInsights(project, database, refresh = false) {
   return request(`/api/dashboard/insights?${params.toString()}`);
 }
 
+export function fetchAgOverview({
+  database,
+  country,
+  language,
+  project_type,
+  dialect,
+  limit = 1000,
+  refresh = false,
+}) {
+  const params = new URLSearchParams({
+    database,
+    limit: String(limit),
+    refresh: String(refresh),
+  });
+  if (country) params.set('country', country);
+  if (language) params.set('language', language);
+  if (project_type) params.set('project_type', project_type);
+  if (dialect) params.set('dialect', dialect);
+  return request(`/api/dashboard/ag-overview?${params.toString()}`);
+}
+
 export function fetchReportPreview(body) {
   return request('/api/reports/preview', {
     method: 'POST',
